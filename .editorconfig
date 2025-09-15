@@ -1,0 +1,20 @@
+root = true
+
+[*]
+end_of_line = lf
+insert_final_newline = true
+charset = utf-8
+indent_style = space
+
+[*.cs]
+indent_size = 4
+
+# Example naming preferences
+dotnet_naming_rule.private_fields_underscore_severity = suggestion
+dotnet_naming_rule.private_fields_underscore_symbols = private_fields
+dotnet_naming_rule.private_fields_underscore_style = underscore_prefix
+
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+
+dotnet_naming_style.underscore_prefix.required_prefix = _
