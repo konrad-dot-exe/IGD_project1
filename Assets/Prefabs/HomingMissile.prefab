@@ -977,5 +977,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   speed: 30
   turnRateDeg: 360
+  maxLifetime: 10
   explodeRadius: 1.5
-  explodeVFX: {fileID: 0}
+  explodeVFX: {fileID: 8816461733047747226, guid: e3dfbbf17f631d649accb682f2e8a6a7, type: 3}
+  explodeSFX: {fileID: 0}
+  sfxVolume: 0.9
+  vfxYOffset: 0

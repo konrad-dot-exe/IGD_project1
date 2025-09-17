@@ -1,5 +1,7 @@
 using UnityEngine;
 using TMPro;
+using System.Collections;
+
 
 namespace EarFPS
 {
@@ -7,6 +9,8 @@ namespace EarFPS
     {
         public static UIHud Instance { get; private set; }
         void Awake() { Instance = this; }
+
+
 
         [Header("Labels")]
         [SerializeField] TextMeshProUGUI scoreText;
@@ -20,9 +24,18 @@ namespace EarFPS
         [SerializeField] CanvasGroup screenFlash;
         [SerializeField] GameObject worldTextPrefab; // a TMP world-space text prefab
 
+        [Header("Toast")]
+        [SerializeField] CanvasGroup toastGroup;       // CanvasGroup on the toast label (alpha starts at 0)
+        [SerializeField] TextMeshProUGUI toastText;    // TMP label for messages
+        [SerializeField] float toastFadeIn = 0.12f;
+        [SerializeField] float toastHold = 0.8f;
+        [SerializeField] float toastFadeOut = 0.18f;
+
+        Coroutine toastCo;
+
         public void SetScore(int score, int delta)
         {
-            scoreText.text = $"Score: {score} {(delta!=0 ? (delta>0? $"+{delta}" : $"{delta}") : "")}";
+            scoreText.text = $"Score: {score} {(delta != 0 ? (delta > 0 ? $"+{delta}" : $"{delta}") : "")}";
         }
         public void SetTimer(float sec)
         {
@@ -79,6 +92,34 @@ namespace EarFPS
         {
             Debug.Log($"LOSE. Score {score} Time {time:F1} BestStreak {bestStreak} {correct}/{attempts}");
         }
+        
+        public void Toast(string msg, float? holdOverride = null)
+        {
+            if (!toastGroup || !toastText) { Debug.Log(msg); return; }
+            if (toastCo != null) StopCoroutine(toastCo);
+            toastCo = StartCoroutine(ToastRoutine(msg, holdOverride ?? toastHold));
+        }
+
+        IEnumerator ToastRoutine(string msg, float hold)
+        {
+            toastText.text = msg;
+            yield return FadeCanvas(toastGroup, toastGroup.alpha, 1f, toastFadeIn);
+            yield return new WaitForSeconds(hold);
+            yield return FadeCanvas(toastGroup, 1f, 0f, toastFadeOut);
+        }
+
+        static IEnumerator FadeCanvas(CanvasGroup g, float a, float b, float time)
+        {
+            float t = 0f;
+            while (t < time)
+            {
+                t += Time.deltaTime;
+                g.alpha = Mathf.Lerp(a, b, t / time);
+                yield return null;
+            }
+            g.alpha = b;
+        }
+
     }
 
     // tiny helper for bestStreak display (optional)

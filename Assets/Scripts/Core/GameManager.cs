@@ -33,6 +33,12 @@ namespace EarFPS
         bool gameOver = false;
         float elapsed = 0f;
 
+        [SerializeField] Transform turret; 
+        [SerializeField] TurretController turretCtrl;   // ← drag your Turret here
+        [SerializeField] float spawnArcDegrees = 140f;  // desired arc width
+        [SerializeField] float edgePaddingDegrees = 10f;// keep away from clamp edges
+        [SerializeField] float spawnYMin = 6f, spawnYMax = 22f;                
+
         void Start()
         {
             remainingEnemies = waves * enemiesPerWave;
@@ -69,15 +75,37 @@ namespace EarFPS
 
         void SpawnEnemy(float speed)
         {
-            Vector2 circle = Random.insideUnitCircle.normalized * ringRadius;
-            Vector3 pos = new Vector3(circle.x, Random.Range(6f, 20f), circle.y);
-            var go = Instantiate(enemyPrefab, pos, Quaternion.LookRotation(-pos.normalized));
+            if (!enemyPrefab) { Debug.LogError("Enemy Prefab missing"); return; }
+
+                        // --- center the arc on the turret's *clamp center direction* (world space) ---
+            Vector3 centerDir = turretCtrl ? turretCtrl.ClampCenterDir : Vector3.forward;
+
+            // keep spawns fully inside the clamp window
+            float allowedHalf = turretCtrl ? Mathf.Max(0f, turretCtrl.YawClampHalfAngle - edgePaddingDegrees) : 180f;
+            float desiredHalf = spawnArcDegrees * 0.5f;
+            float half = Mathf.Min(desiredHalf, allowedHalf);
+
+            // slight center bias so edges are rarer
+            float u = Random.value; u = u * u * (3f - 2f * u); // SmoothStep
+            float offset = Mathf.Lerp(-half, +half, u);
+
+            // rotate the centerDir around Y by 'offset'
+            Vector3 dir = (Quaternion.AngleAxis(offset, Vector3.up) * centerDir).normalized;
+
+            // spawn position
+            Vector3 c = spawnRing ? spawnRing.position : Vector3.zero;
+            Vector3 pos = c + dir * ringRadius;
+            pos.y = Random.Range(spawnYMin, spawnYMax);
+
+            // face inward
+            Quaternion rot = Quaternion.LookRotation((c - pos).normalized, Vector3.up);
+
+            var go = Instantiate(enemyPrefab, pos, rot);
+
             var es = go.GetComponent<EnemyShip>();
             es.rootMidi = Random.Range(rootMidiMin, rootMidiMax + 1);
             es.interval = IntervalTable.ByIndex(Random.Range(0, IntervalTable.Count));
-            // speed override
-            var spdField = typeof(EnemyShip).GetField("speed", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            if (spdField != null) spdField.SetValue(es, speed);
+            // set speed if your EnemyShip exposes it or has a setter
         }
 
         public void OnAnswer(bool correctAns, IntervalDef interval)
@@ -121,17 +149,21 @@ namespace EarFPS
 
         void OnDrawGizmosSelected()
         {
-            if (spawnRing == null) return;
+            if (!turret) return;
             Gizmos.color = Color.cyan;
-            const int steps = 64;
-            Vector3 c = spawnRing.position;
-            Vector3 prev = c + new Vector3(ringRadius, 0, 0);
-            for (int i = 1; i <= steps; i++)
+
+            float centerYaw = turret.eulerAngles.y * Mathf.Deg2Rad;
+            float half = Mathf.Max(0f, (spawnArcDegrees * 0.5f) - edgePaddingDegrees) * Mathf.Deg2Rad;
+            Vector3 c = spawnRing ? spawnRing.position : Vector3.zero;
+
+            const int steps = 48;
+            for (int i = 0; i < steps; i++)
             {
-                float a = (i / (float)steps) * Mathf.PI * 2f;
-                Vector3 p = c + new Vector3(Mathf.Cos(a)*ringRadius, 0, Mathf.Sin(a)*ringRadius);
-                Gizmos.DrawLine(prev, p);
-                prev = p;
+                float a0 = centerYaw + Mathf.Lerp(-half, +half, i      / (float)steps);
+                float a1 = centerYaw + Mathf.Lerp(-half, +half, (i + 1) / (float)steps);
+                Vector3 p0 = c + new Vector3(Mathf.Cos(a0) * ringRadius, 0f, Mathf.Sin(a0) * ringRadius);
+                Vector3 p1 = c + new Vector3(Mathf.Cos(a1) * ringRadius, 0f, Mathf.Sin(a1) * ringRadius);
+                Gizmos.DrawLine(p0, p1);
             }
         }
 
