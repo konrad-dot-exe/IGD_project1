@@ -39,11 +39,17 @@ namespace EarFPS
 
 
         [SerializeField] Transform turret;
-        [SerializeField] TurretController turretCtrl;   // ← drag your Turret here
+        //[SerializeField] TurretController turretCtrl;   // ← drag your Turret here
         [SerializeField] float spawnArcDegrees = 140f;  // desired arc width
         [SerializeField] float edgePaddingDegrees = 10f;// keep away from clamp edges
         [SerializeField] float spawnYMin = 6f, spawnYMax = 22f;
+        //public Transform TurretTransform;
 
+        // --- Turret reference (single source of truth) ---
+        [SerializeField] TurretController turretCtrl;   // drag your Turret root here in the Inspector
+        public Transform TurretTransform => turretCtrl ? turretCtrl.transform : null;
+
+        
         void Start()
         {
             remainingEnemies = waves * enemiesPerWave;
@@ -110,6 +116,7 @@ namespace EarFPS
             var es = go.GetComponent<EnemyShip>();
             es.rootMidi = Random.Range(rootMidiMin, rootMidiMax + 1);
             es.interval = PickRandomEnabledInterval();
+            es.SetTarget(TurretTransform);
             // set speed if your EnemyShip exposes it or has a setter
         }
 
@@ -177,7 +184,7 @@ namespace EarFPS
                 Gizmos.DrawLine(p0, p1);
             }
         }
-        
+
         static IntervalDef? FindDefBySemitones(int semis)
         {
             for (int i = 0; i < IntervalTable.Count; i++)
@@ -202,7 +209,15 @@ namespace EarFPS
             }
             // fallback: any interval
             return IntervalTable.ByIndex(Random.Range(0, IntervalTable.Count));
-}
+        }
+        
+        public void PlayHitFeedback()
+        {
+            // 3-pulse strobe + subtle shake
+            UIHud.Instance?.HitStrobe(3, 0.05f, 0.05f, Color.white);
+            var shaker = FindFirstObjectByType<CameraShake>();
+            shaker?.Shake(0.28f, 0.28f);
+        }
 
 
     }

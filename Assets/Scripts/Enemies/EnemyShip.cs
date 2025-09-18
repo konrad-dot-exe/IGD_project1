@@ -17,17 +17,30 @@ namespace EarFPS
         void OnEnable() { All.Add(this); }
         void OnDisable() { All.Remove(this); }
 
+        Transform target;                           // who we chase
+
         void Update()
         {
-            Vector3 dir = (-transform.position).normalized;
-            transform.position += dir * speed * Time.deltaTime;
+            // steer toward turret (fallback to origin if missing)
+            Vector3 goal = target ? target.position : Vector3.zero;
+            Vector3 to   = goal - transform.position;
 
-            if (transform.position.magnitude <= bombRadius)
+            if (to.sqrMagnitude > 0.0001f)
             {
-                GameManager.Instance.GameOver();
+                Vector3 dir = to.normalized;
+                transform.position += dir * speed * Time.deltaTime;      // your existing speed
+                transform.rotation  = Quaternion.LookRotation(dir, Vector3.up);
+            }
+
+            // bomb when close
+            if (to.sqrMagnitude <= bombRadius * bombRadius)
+            {
+                GameManager.Instance.PlayHitFeedback(); // strobe + shake every time
+                GameManager.Instance.GameOver();        // your lose behavior
                 Destroy(gameObject);
             }
         }
+
 
         public void Die()
         {
@@ -60,6 +73,11 @@ namespace EarFPS
                 }
             }
             return best;
+        }
+
+        public void SetTarget(Transform t)          // called by GameManager after spawn
+        {
+            target = t;
         }
     }
 }
