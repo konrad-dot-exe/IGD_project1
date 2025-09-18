@@ -91,7 +91,7 @@ namespace EarFPS
             isListening = true;
 
             // Mute quiz beeps while we listen
-            quiz.SetMuted(true);
+            quiz.SetVoiceListening(true);   // in StartListening()
             Log("Muted quiz audio");
 
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
@@ -100,7 +100,7 @@ namespace EarFPS
                 var phrases = new List<string>(phraseToSemis.Keys).ToArray();
                 recognizer = new KeywordRecognizer(phrases, confidence);
                 recognizer.OnPhraseRecognized += OnPhraseRecognized;
-                Log($"Created KeywordRecognizer (phrases={phrases.Length}, confidence={confidence})");
+                //Log($"Created KeywordRecognizer (phrases={phrases.Length}, confidence={confidence})");
             }
             if (!recognizer.IsRunning)
             {
@@ -123,11 +123,11 @@ namespace EarFPS
             if (recognizer != null && recognizer.IsRunning)
             {
                 recognizer.Stop();
-                Log("Recognizer.Stop()");
+                //Log("Recognizer.Stop()");
             }
 #endif
-            quiz.SetMuted(false);
-            Log("Unmuted quiz audio");
+            quiz.SetVoiceListening(false);  // in StopListening()
+            //Log("Unmuted quiz audio");
         }
 
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN

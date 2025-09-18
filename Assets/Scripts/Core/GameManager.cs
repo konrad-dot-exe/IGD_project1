@@ -33,11 +33,16 @@ namespace EarFPS
         bool gameOver = false;
         float elapsed = 0f;
 
-        [SerializeField] Transform turret; 
+        [Header("Intervals Used In Game")]
+        // Semitone distances that are allowed to spawn (edit in Inspector)
+        [SerializeField] int[] enabledSemitones = new int[] { 0, 2, 4, 5, 7, 9, 12 };
+
+
+        [SerializeField] Transform turret;
         [SerializeField] TurretController turretCtrl;   // ← drag your Turret here
         [SerializeField] float spawnArcDegrees = 140f;  // desired arc width
         [SerializeField] float edgePaddingDegrees = 10f;// keep away from clamp edges
-        [SerializeField] float spawnYMin = 6f, spawnYMax = 22f;                
+        [SerializeField] float spawnYMin = 6f, spawnYMax = 22f;
 
         void Start()
         {
@@ -77,7 +82,7 @@ namespace EarFPS
         {
             if (!enemyPrefab) { Debug.LogError("Enemy Prefab missing"); return; }
 
-                        // --- center the arc on the turret's *clamp center direction* (world space) ---
+            // --- center the arc on the turret's *clamp center direction* (world space) ---
             Vector3 centerDir = turretCtrl ? turretCtrl.ClampCenterDir : Vector3.forward;
 
             // keep spawns fully inside the clamp window
@@ -104,7 +109,7 @@ namespace EarFPS
 
             var es = go.GetComponent<EnemyShip>();
             es.rootMidi = Random.Range(rootMidiMin, rootMidiMax + 1);
-            es.interval = IntervalTable.ByIndex(Random.Range(0, IntervalTable.Count));
+            es.interval = PickRandomEnabledInterval();
             // set speed if your EnemyShip exposes it or has a setter
         }
 
@@ -144,6 +149,12 @@ namespace EarFPS
         {
             if (gameOver) return;
             gameOver = true;
+
+            // feedback
+            UIHud.Instance?.HitStrobe(3, 0.05f, 0.05f, Color.red);   // try Color.red for damage vibe
+            var shaker = FindFirstObjectByType<CameraShake>();
+            shaker?.Shake(0.28f, 0.28f);
+
             UIHud.Instance?.ShowLose(score, elapsed, bestStreak, correct, attempts);
         }
 
@@ -159,13 +170,40 @@ namespace EarFPS
             const int steps = 48;
             for (int i = 0; i < steps; i++)
             {
-                float a0 = centerYaw + Mathf.Lerp(-half, +half, i      / (float)steps);
+                float a0 = centerYaw + Mathf.Lerp(-half, +half, i / (float)steps);
                 float a1 = centerYaw + Mathf.Lerp(-half, +half, (i + 1) / (float)steps);
                 Vector3 p0 = c + new Vector3(Mathf.Cos(a0) * ringRadius, 0f, Mathf.Sin(a0) * ringRadius);
                 Vector3 p1 = c + new Vector3(Mathf.Cos(a1) * ringRadius, 0f, Mathf.Sin(a1) * ringRadius);
                 Gizmos.DrawLine(p0, p1);
             }
         }
+        
+        static IntervalDef? FindDefBySemitones(int semis)
+        {
+            for (int i = 0; i < IntervalTable.Count; i++)
+            {
+                var d = IntervalTable.ByIndex(i);
+                if (d.semitones == semis) return d;
+            }
+            return null;
+        }
+
+        IntervalDef PickRandomEnabledInterval()
+        {
+            if (enabledSemitones != null && enabledSemitones.Length > 0)
+            {
+                // try a few times in case someone put an invalid number
+                for (int tries = 0; tries < 6; tries++)
+                {
+                    int sem = enabledSemitones[Random.Range(0, enabledSemitones.Length)];
+                    var def = FindDefBySemitones(sem);
+                    if (def != null) return def.Value;
+                }
+            }
+            // fallback: any interval
+            return IntervalTable.ByIndex(Random.Range(0, IntervalTable.Count));
+}
+
 
     }
 }

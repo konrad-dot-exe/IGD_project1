@@ -1,7 +1,7 @@
 using UnityEngine;
 using TMPro;
 using System.Collections;
-
+using UnityEngine.UI;  
 
 namespace EarFPS
 {
@@ -21,8 +21,14 @@ namespace EarFPS
         [SerializeField] TextMeshProUGUI selectedIntervalText;
 
         [Header("FX")]
-        [SerializeField] CanvasGroup screenFlash;
         [SerializeField] GameObject worldTextPrefab; // a TMP world-space text prefab
+        [Header("Screen Flash")]
+        [SerializeField] CanvasGroup screenFlash;
+        [SerializeField] CanvasGroup screenFlashGroup;   // alpha starts at 0
+        [SerializeField] Image screenFlashImage;   // the fullscreen Image
+        Coroutine hitCo;
+
+
 
         [Header("Toast")]
         [SerializeField] CanvasGroup toastGroup;       // CanvasGroup on the toast label (alpha starts at 0)
@@ -92,7 +98,7 @@ namespace EarFPS
         {
             Debug.Log($"LOSE. Score {score} Time {time:F1} BestStreak {bestStreak} {correct}/{attempts}");
         }
-        
+
         public void Toast(string msg, float? holdOverride = null)
         {
             if (!toastGroup || !toastText) { Debug.Log(msg); return; }
@@ -119,6 +125,45 @@ namespace EarFPS
             }
             g.alpha = b;
         }
+        
+        public void HitStrobe(int pulses = 3, float on = 0.06f, float off = 0.05f, Color? color = null)
+        {
+            if (!screenFlashGroup || !screenFlashImage) return;
+            if (hitCo != null) StopCoroutine(hitCo);
+            hitCo = StartCoroutine(HitStrobeCo(pulses, on, off, color ?? Color.white));
+        }
+
+        IEnumerator HitStrobeCo(int pulses, float on, float off, Color color)
+        {
+            var oldColor = screenFlashImage.color;
+            screenFlashImage.color = new Color(color.r, color.g, color.b, 1f);
+
+            for (int i = 0; i < pulses; i++)
+            {
+                // quick up
+                yield return Fade(screenFlashGroup, screenFlashGroup.alpha, 1f, 0.035f);
+                yield return new WaitForSecondsRealtime(on);
+                // quick down
+                yield return Fade(screenFlashGroup, 1f, 0f, 0.08f);
+                if (i < pulses - 1) yield return new WaitForSecondsRealtime(off);
+            }
+
+            screenFlashImage.color = oldColor;
+            hitCo = null;
+        }
+
+        static IEnumerator Fade(CanvasGroup g, float a, float b, float t)
+        {
+            float s = 0f;
+            while (s < t)
+            {
+                s += Time.unscaledDeltaTime;
+                g.alpha = Mathf.Lerp(a, b, s / t);
+                yield return null;
+            }
+            g.alpha = b;
+        }
+
 
     }
 

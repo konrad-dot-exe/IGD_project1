@@ -34107,8 +34107,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 282ce6cea47622344832aa2666882ca7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  speed: 4
-  bombRadius: 4
+  speed: 2
+  bombRadius: 2
   emissiveRenderers:
   - {fileID: 0}
   rootMidi: 0

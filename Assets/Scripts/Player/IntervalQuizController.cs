@@ -19,6 +19,7 @@ namespace EarFPS
         [SerializeField] float listenRepeatGap = 0.20f;
         [SerializeField] float minVolume = 0.25f;
         [SerializeField] float maxListenDist = 150f;
+        [SerializeField] ListenZoom listenZoom;
 
         [Header("Input")]
         [SerializeField] Key submitKey = Key.Space;
@@ -43,6 +44,18 @@ namespace EarFPS
         [Header("Tone Envelope")]
         [SerializeField] ADSR envelope = new ADSR { attack = 0.005f, decay = 0.060f, sustain = 0.65f, release = 0.060f };
         [SerializeField] int toneSampleRate = 48000;
+
+        [Header("Voice Ducking")]
+        [SerializeField, Range(0f, 1f)] float duckedVolume = 0.25f; // volume while listening
+        [SerializeField] float duckAttack = 0.05f;   // fade down time
+        [SerializeField] float duckRelease = 0.12f;  // fade up time
+
+        
+
+
+        float duck = 1f;          // current duck multiplier
+        Coroutine duckCo;
+
 
         int selectedIndex = 0; // index into IntervalTable.All
         Coroutine listenLoop;
@@ -106,12 +119,18 @@ namespace EarFPS
                 (mouse != null && mouse.rightButton.isPressed) ||
                 (kb != null && optionalListenKey != Key.None && kb[optionalListenKey].isPressed);
 
+                        // start listening
             if (listenHeld && listenLoop == null)
+            {
                 listenLoop = StartCoroutine(ListenCoroutine());
+                listenZoom?.SetListening(true);
+            }
+            // stop listening
             if (!listenHeld && listenLoop != null)
             {
                 StopCoroutine(listenLoop);
                 listenLoop = null;
+                listenZoom?.SetListening(false);
             }
 
             // ----- SUBMIT -----
@@ -133,6 +152,7 @@ namespace EarFPS
                 if (t != null)
                 {
                     float dist = Vector3.Distance(transform.position, t.transform.position);
+                    // volume by distance
                     float vol = Mathf.Lerp(minVolume, 1f, 1f - Mathf.Clamp01(dist / maxListenDist));
 
                     float rootFreq = ToneSynth.MidiToFreq(t.rootMidi);
@@ -143,6 +163,10 @@ namespace EarFPS
 
                     var clip1 = ToneSynth.CreateTone(rootFreq, lenWithRelease, toneSampleRate, waveform, 0.15f, envelope);
                     var clip2 = ToneSynth.CreateTone(targetFreq, lenWithRelease, toneSampleRate, waveform, 0.15f, envelope);
+
+                    
+
+                    vol = Mathf.Clamp01(vol * duck); // apply ducking
 
                     // "Note On" for root
                     audioSource.PlayOneShot(clip1, vol);
@@ -194,32 +218,61 @@ namespace EarFPS
             yield return new WaitForSeconds(missLockout);
             isLockedOut = false;
         }
-        
+
         // Let voice temporarily mute the quiz tones while listening
-        public void SetMuted(bool muted) {
+        public void SetMuted(bool muted)
+        {
             if (audioSource) audioSource.mute = muted;
         }
 
         // Submit using a specific interval (doesn't rely on the wheel selection)
-        public bool TrySubmitInterval(IntervalDef chosen) {
+        public bool TrySubmitInterval(IntervalDef chosen)
+        {
             var t = turret.CurrentTarget;
             if (t == null) return false;
 
-            if (chosen.semitones == t.interval.semitones) {
+            if (chosen.semitones == t.interval.semitones)
+            {
                 var spawnPos = missileSpawn ? missileSpawn.position : transform.position;
-                var lookRot  = Quaternion.LookRotation(t.transform.position - spawnPos);
+                var lookRot = Quaternion.LookRotation(t.transform.position - spawnPos);
                 var go = Instantiate(missilePrefab, spawnPos, lookRot);
                 go.GetComponent<HomingMissile>().Init(t);
 
                 GameManager.Instance.OnAnswer(true, t.interval);
                 UIHud.Instance?.ToastCorrect(t.interval.displayName, t.transform.position);
-            } else {
+            }
+            else
+            {
                 GameManager.Instance.OnAnswer(false, t.interval);
                 UIHud.Instance?.FlashWrong();
                 StartCoroutine(Lockout());
             }
             return true;
         }
+        
+        public void SetVoiceListening(bool listening)
+        {
+            if (duckCo != null) StopCoroutine(duckCo);
+            float target = listening ? duckedVolume : 1f;
+            float time   = listening ? duckAttack    : duckRelease;
+            duckCo = StartCoroutine(DuckTo(target, time));
+        }
+
+        IEnumerator DuckTo(float target, float time)
+        {
+            float start = duck;
+            float t = 0f;
+            // unscaled so it still feels snappy if you ever pause/slow time
+            while (t < time)
+            {
+                t += Time.unscaledDeltaTime;
+                duck = Mathf.Lerp(start, target, Mathf.Clamp01(t / time));
+                yield return null;
+            }
+            duck = target;
+            duckCo = null;
+        }
+
 
     }
 }
