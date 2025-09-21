@@ -20,6 +20,12 @@ namespace EarFPS
         [SerializeField] float minVolume = 0.25f;
         [SerializeField] float maxListenDist = 150f;
         [SerializeField] ListenZoom listenZoom;
+       
+        [Header("Listen rate vs distance")]
+        [SerializeField] float noteGapFar   = 0.20f;  // gap BETWEEN note1 & note2 when far
+        [SerializeField] float noteGapNear  = 0.04f;  // ...when very close (tremolo feel)
+        [SerializeField] float pairGapFar   = 0.50f;  // gap AFTER the pair when far
+        [SerializeField] float pairGapNear  = 0.06f;  // ...when very close
 
         [Header("Input")]
         [SerializeField] Key submitKey = Key.Space;
@@ -151,41 +157,43 @@ namespace EarFPS
                 var t = turret.CurrentTarget;
                 if (t != null)
                 {
+                    // ---- distance & volume ----
                     float dist = Vector3.Distance(transform.position, t.transform.position);
-                    // volume by distance
-                    float vol = Mathf.Lerp(minVolume, 1f, 1f - Mathf.Clamp01(dist / maxListenDist));
-
-                    float rootFreq = ToneSynth.MidiToFreq(t.rootMidi);
-                    float targetFreq = ToneSynth.MidiToFreq(t.rootMidi + t.interval.semitones);
-
-                    // NOTE: make clips long enough to include the release tail
-                    float lenWithRelease = beepDur + envelope.release;
-
-                    var clip1 = ToneSynth.CreateTone(rootFreq, lenWithRelease, toneSampleRate, waveform, 0.15f, envelope);
-                    var clip2 = ToneSynth.CreateTone(targetFreq, lenWithRelease, toneSampleRate, waveform, 0.15f, envelope);
-
-                    
-
+                    float vol  = Mathf.Lerp(minVolume, 1f, 1f - Mathf.Clamp01(dist / maxListenDist));
                     vol = Mathf.Clamp01(vol * duck); // apply ducking
 
-                    // "Note On" for root
+                    // ---- dynamic timing (closer = faster) ----
+                    float closeness = Mathf.InverseLerp(maxListenDist, 0f, dist);
+                    closeness = Mathf.SmoothStep(0f, 1f, closeness); // nicer ramp near the end
+
+                    float gapBetweenNotes = Mathf.Lerp(noteGapFar, noteGapNear, closeness);
+                    float gapAfterPair    = Mathf.Lerp(pairGapFar,  pairGapNear,  closeness);
+
+                    // ---- tone generation (with ADSR) ----
+                    float rootFreq   = ToneSynth.MidiToFreq(t.rootMidi);
+                    float targetFreq = ToneSynth.MidiToFreq(t.rootMidi + t.interval.semitones);
+
+                    // make clips long enough to include the release tail
+                    float lenWithRelease = beepDur + envelope.release;
+
+                    var clip1 = ToneSynth.CreateTone(rootFreq,   lenWithRelease, toneSampleRate, waveform, 0.15f, envelope);
+                    var clip2 = ToneSynth.CreateTone(targetFreq, lenWithRelease, toneSampleRate, waveform, 0.15f, envelope);
+
+                    // ---- play pair, overlapping naturally if release > gaps ----
                     audioSource.PlayOneShot(clip1, vol);
+                    yield return new WaitForSeconds(beepDur + gapBetweenNotes);
 
-                    // Schedule the second note by *onset gap* (MIDI-style)
-                    yield return new WaitForSeconds(beepDur + gapDur);
-
-                    // "Note On" for target — will overlap if release > gapDur
                     audioSource.PlayOneShot(clip2, vol);
-
-                    // Wait until it's time to repeat the pair
-                    yield return new WaitForSeconds(beepDur + listenRepeatGap);
+                    yield return new WaitForSeconds(beepDur + gapAfterPair);
                 }
                 else
                 {
+                    // no target this frame — try again next frame
                     yield return null;
                 }
             }
         }
+
 
 
         void TrySubmit()
@@ -200,6 +208,9 @@ namespace EarFPS
                 var lookRot = Quaternion.LookRotation(t.transform.position - spawnPos);
                 var go = Instantiate(missilePrefab, spawnPos, lookRot);
                 go.GetComponent<HomingMissile>().Init(t);
+
+                // NEW: fire SFX
+                SfxPalette.I?.OnMissileFire(spawnPos);
 
                 GameManager.Instance.OnAnswer(true, t.interval);
                 UIHud.Instance?.ToastCorrect(t.interval.displayName, t.transform.position);
@@ -245,6 +256,8 @@ namespace EarFPS
             {
                 GameManager.Instance.OnAnswer(false, t.interval);
                 UIHud.Instance?.FlashWrong();
+                // NEW: dramatic feedback for wrong guess
+                GameManager.Instance.PlayWrongAnswerFeedback();
                 StartCoroutine(Lockout());
             }
             return true;

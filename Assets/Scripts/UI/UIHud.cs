@@ -41,7 +41,7 @@ namespace EarFPS
 
         public void SetScore(int score, int delta)
         {
-            scoreText.text = $"Score: {score} {(delta != 0 ? (delta > 0 ? $"+{delta}" : $"{delta}") : "")}";
+            scoreText.text = $"Score: {score} ";   //{(delta != 0 ? (delta > 0 ? $"+{delta}" : $"{delta}") : "")}
         }
         public void SetTimer(float sec)
         {
@@ -63,16 +63,16 @@ namespace EarFPS
 
         public void ToastCorrect(string name, Vector3 worldPos)
         {
-            if (!worldTextPrefab) return;
-            var go = Instantiate(worldTextPrefab, worldPos, Quaternion.identity);
-            var toast = go.GetComponent<WorldToast>();
-            if (toast) toast.SetText(name + "!");
-            else
-            {
-                // fallback if script not present
-                var tmp = go.GetComponent<TextMeshPro>();
-                if (tmp) tmp.text = name + "!";
-            }
+            // if (!worldTextPrefab) return;
+            // var go = Instantiate(worldTextPrefab, worldPos, Quaternion.identity);
+            // var toast = go.GetComponent<WorldToast>();
+            // if (toast) toast.SetText(name + "!");
+            // else
+            // {
+            //     // fallback if script not present
+            //     var tmp = go.GetComponent<TextMeshPro>();
+            //     if (tmp) tmp.text = name + "!";
+            // }
         }
 
         public void FlashWrong()

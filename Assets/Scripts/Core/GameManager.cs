@@ -49,7 +49,7 @@ namespace EarFPS
         [SerializeField] TurretController turretCtrl;   // drag your Turret root here in the Inspector
         public Transform TurretTransform => turretCtrl ? turretCtrl.transform : null;
 
-        
+
         void Start()
         {
             remainingEnemies = waves * enemiesPerWave;
@@ -152,39 +152,6 @@ namespace EarFPS
             }
         }
 
-        public void GameOver()
-        {
-            if (gameOver) return;
-            gameOver = true;
-
-            // feedback
-            UIHud.Instance?.HitStrobe(3, 0.05f, 0.05f, Color.red);   // try Color.red for damage vibe
-            var shaker = FindFirstObjectByType<CameraShake>();
-            shaker?.Shake(0.28f, 0.28f);
-
-            UIHud.Instance?.ShowLose(score, elapsed, bestStreak, correct, attempts);
-        }
-
-        void OnDrawGizmosSelected()
-        {
-            if (!turret) return;
-            Gizmos.color = Color.cyan;
-
-            float centerYaw = turret.eulerAngles.y * Mathf.Deg2Rad;
-            float half = Mathf.Max(0f, (spawnArcDegrees * 0.5f) - edgePaddingDegrees) * Mathf.Deg2Rad;
-            Vector3 c = spawnRing ? spawnRing.position : Vector3.zero;
-
-            const int steps = 48;
-            for (int i = 0; i < steps; i++)
-            {
-                float a0 = centerYaw + Mathf.Lerp(-half, +half, i / (float)steps);
-                float a1 = centerYaw + Mathf.Lerp(-half, +half, (i + 1) / (float)steps);
-                Vector3 p0 = c + new Vector3(Mathf.Cos(a0) * ringRadius, 0f, Mathf.Sin(a0) * ringRadius);
-                Vector3 p1 = c + new Vector3(Mathf.Cos(a1) * ringRadius, 0f, Mathf.Sin(a1) * ringRadius);
-                Gizmos.DrawLine(p0, p1);
-            }
-        }
-
         static IntervalDef? FindDefBySemitones(int semis)
         {
             for (int i = 0; i < IntervalTable.Count; i++)
@@ -210,13 +177,45 @@ namespace EarFPS
             // fallback: any interval
             return IntervalTable.ByIndex(Random.Range(0, IntervalTable.Count));
         }
-        
+
+        public void GameOver()
+        {
+            if (gameOver) return;
+            gameOver = true;
+
+            // feedback
+            UIHud.Instance?.HitStrobe(3, 0.05f, 0.05f, Color.red);   
+            var shaker = FindFirstObjectByType<CameraShake>();
+            shaker?.Shake(0.28f, 0.28f);
+            UIHud.Instance?.ShowLose(score, elapsed, bestStreak, correct, attempts);
+        }
+
+
         public void PlayHitFeedback()
         {
             // 3-pulse strobe + subtle shake
-            UIHud.Instance?.HitStrobe(3, 0.05f, 0.05f, Color.white);
+            UIHud.Instance?.HitStrobe(3, 0.05f, 0.05f, Color.red);
             var shaker = FindFirstObjectByType<CameraShake>();
             shaker?.Shake(0.28f, 0.28f);
+        }
+        
+        public void PlayWrongAnswerFeedback()
+        {
+            // punchy red strobe, a bit quicker than bomb
+            UIHud.Instance?.HitStrobe(
+                pulses: 3,
+                on: 0.045f,
+                off: 0.040f,
+                color: new Color(1f, 0.25f, 0.25f) // red tint
+            );
+
+            Debug.Log($"[TrySubmit] wrong: paletteNull={SfxPalette.I == null}");
+            // NEW: wrong-guess SFX (2D)
+            SfxPalette.I?.OnWrongGuess();
+
+            // small tap shake (so it's distinct from a bomb)
+            var shaker = FindFirstObjectByType<CameraShake>();
+            shaker?.Shake(duration: 0.18f, amplitude: 0.18f);
         }
 
 
