@@ -11,23 +11,31 @@ namespace EarFPS
 {
     public class VoiceIntervalInput : MonoBehaviour
     {
+        [Header("Game")]
         [SerializeField] IntervalQuizController quiz;
-        [SerializeField] Key  pushToTalkKey = Key.V;
-        [SerializeField] bool showHeardToast = true;
+
+        [Header("Controls")]
+        [SerializeField] Key pushToTalkKey = Key.V;
+
+        [Header("UI")]
+        [SerializeField] VoiceUI voiceUI;
+        [SerializeField] bool showHeardToast = false;
 
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
+        [Header("Recognizer")]
         [SerializeField] ConfidenceLevel confidence = ConfidenceLevel.Medium;
+        KeywordRecognizer recognizer;
 #endif
 
         [Header("Debug")]
-        [SerializeField] bool debugLogs = true;
+        [SerializeField] bool debugLogs = false;
 
-        // --- phrase -> semitones map (extend as you like) ---
+        // ---------- Grammar ----------
         static readonly (int semis, string[] phrases)[] Grammar =
         {
             (0,  new[] { "unison", "perfect unison", "p1", "first" }),
             (1,  new[] { "minor second", "m2", "semitone", "half step" }),
-            (2,  new[] { "major second", "m a j o r second", "m2 whole", "whole tone", "whole step", "m2 up", "m2", "M2", "major two", "two" }),
+            (2,  new[] { "major second", "m2 whole", "whole tone", "whole step", "m2 up", "m2", "m two", "major two", "M2" }),
             (3,  new[] { "minor third", "m3", "flat third" }),
             (4,  new[] { "major third", "M3" }),
             (5,  new[] { "perfect fourth", "p4", "fourth" }),
@@ -42,22 +50,28 @@ namespace EarFPS
             (14, new[] { "major ninth", "M9" }),
         };
 
-        Dictionary<string,int> phraseToSemis;
-        bool isListening = false;
+        Dictionary<string, int> phraseToSemis;
+        VoiceUI _vui;
 
-#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
-        KeywordRecognizer recognizer;
-#endif
+        // Listening state
+        bool isListening;
 
+        // ---------- Main-thread queue (fixes threading) ----------
+        struct PendingCommand { public string raw; public int semis; public bool mapped; }
+        readonly Queue<PendingCommand> _queue = new Queue<PendingCommand>(4);
+        readonly object _lock = new object();
+
+        // ---------- Lifecycle ----------
         void Awake()
         {
-            // Build phrase dictionary (lowercase keys)
+            // Build grammar lookup
             phraseToSemis = new Dictionary<string, int>();
             foreach (var g in Grammar)
                 foreach (var p in g.phrases)
                     phraseToSemis[p.ToLowerInvariant()] = g.semis;
 
-            Log($"Awake → grammar phrases: {phraseToSemis.Count}");
+            _vui = voiceUI ? voiceUI : FindFirstObjectByType<VoiceUI>();
+            Log($"Grammar ready ({phraseToSemis.Count} phrases).");
         }
 
         void OnDestroy()
@@ -65,7 +79,6 @@ namespace EarFPS
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
             if (recognizer != null)
             {
-                Log("OnDestroy → disposing recognizer");
                 recognizer.OnPhraseRecognized -= OnPhraseRecognized;
                 if (recognizer.IsRunning) recognizer.Stop();
                 recognizer.Dispose();
@@ -75,24 +88,42 @@ namespace EarFPS
 
         void Update()
         {
+
+            if (quiz == null)
+            {
+                if (debugLogs) Debug.LogWarning("[Voice] Quiz is null; skipping.");
+                return;
+            }
+
             var kb = Keyboard.current;
             if (kb == null || quiz == null) return;
 
-            bool down = kb[pushToTalkKey].wasPressedThisFrame;
-            bool up   = kb[pushToTalkKey].wasReleasedThisFrame;
+            // PTT
+            if (kb[pushToTalkKey].wasPressedThisFrame) StartListening();
+            if (kb[pushToTalkKey].wasReleasedThisFrame) StopListening();
 
-            if (down) { Log("PTT down"); StartListening(); }
-            if (up)   { Log("PTT up");   StopListening();   }
+            // Consume any pending command queued by the recognizer thread
+            PendingCommand? job = null;
+            lock (_lock)
+            {
+                if (_queue.Count > 0) job = _queue.Dequeue();
+            }
+            if (job.HasValue) HandleVoiceCommand(job.Value);
+
+            if (job.HasValue)
+            {
+                HandleVoiceCommand(job.Value);
+            }
         }
 
+        // ---------- Control ----------
         void StartListening()
         {
-            if (isListening) { Log("StartListening ignored (already listening)"); return; }
+            if (isListening) return;
             isListening = true;
 
-            // Mute quiz beeps while we listen
-            quiz.SetVoiceListening(true);   // in StartListening()
-            Log("Muted quiz audio");
+            quiz.SetVoiceListening(true);
+            _vui?.SetListening(true);
 
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
             if (recognizer == null)
@@ -100,7 +131,7 @@ namespace EarFPS
                 var phrases = new List<string>(phraseToSemis.Keys).ToArray();
                 recognizer = new KeywordRecognizer(phrases, confidence);
                 recognizer.OnPhraseRecognized += OnPhraseRecognized;
-                //Log($"Created KeywordRecognizer (phrases={phrases.Length}, confidence={confidence})");
+                Log($"KeywordRecognizer created (phrases={phrases.Length}, conf={confidence})");
             }
             if (!recognizer.IsRunning)
             {
@@ -108,58 +139,48 @@ namespace EarFPS
                 Log("Recognizer.Start()");
             }
 #else
-            Log("Voice not supported on this platform (KeywordRecognizer requires Windows).");
+            Log("Voice recognition requires Windows (KeywordRecognizer).");
 #endif
-
-            UIHud.Instance?.Toast("Voice: listening…");
         }
 
         void StopListening()
         {
-            if (!isListening) { Log("StopListening ignored (not listening)"); return; }
+            if (!isListening) return;
             isListening = false;
 
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
             if (recognizer != null && recognizer.IsRunning)
             {
                 recognizer.Stop();
-                //Log("Recognizer.Stop()");
+                Log("Recognizer.Stop()");
             }
 #endif
-            quiz.SetVoiceListening(false);  // in StopListening()
-            //Log("Unmuted quiz audio");
+            quiz.SetVoiceListening(false);
+            _vui?.SetListening(false);
         }
 
+        // ---------- Recognizer thread → queue to main thread ----------
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
         void OnPhraseRecognized(PhraseRecognizedEventArgs args)
         {
-            Log($"OnPhraseRecognized → text=\"{args.text}\", conf={args.confidence}, dur={args.phraseDuration.TotalMilliseconds:F0}ms");
+            string heard = args.text ?? "";
+            string key = heard.ToLowerInvariant();
 
-            string heard = args.text.ToLowerInvariant();
-            if (!phraseToSemis.TryGetValue(heard, out int semis))
+            // DO NOT touch Unity objects here (background thread)
+            bool mapped = phraseToSemis.TryGetValue(key, out int semis);
+
+            if (debugLogs) Debug.Log($"[Voice] heard: \"{heard}\" conf={args.confidence}");
+
+            // Queue for Update() on main thread
+            lock (_lock)
             {
-                Log($"Unmapped phrase: \"{args.text}\"");
-                if (showHeardToast) UIHud.Instance?.Toast($"Voice: \"{args.text}\" ?");
-                return;
+                // keep it bounded so it can't grow forever
+                if (_queue.Count < 8) _queue.Enqueue(new PendingCommand { raw = heard, semis = semis, mapped = mapped });
             }
-
-            // Find the IntervalDef by semitone count
-            var def = FindDefBySemitones(semis);
-            if (def == null)
-            {
-                Log($"Mapped semis={semis} but IntervalDef not found");
-                if (showHeardToast) UIHud.Instance?.Toast($"Voice: unmapped ({args.text})");
-                return;
-            }
-
-            Log($"Mapped → {def.Value.displayName} ({def.Value.semitones} semitones). Submitting.");
-            bool ok = quiz.TrySubmitInterval(def.Value);
-            Log($"Submit result: {(ok ? "attempted (target existed)" : "no target")}");
-            if (showHeardToast) UIHud.Instance?.Toast($"Voice → {def.Value.displayName}");
         }
 #endif
 
-        // Helper: walk the interval table to find the one with the requested semitone distance
+        // ---------- Helpers ----------
         static IntervalDef? FindDefBySemitones(int semis)
         {
             for (int i = 0; i < IntervalTable.Count; i++)
@@ -172,8 +193,48 @@ namespace EarFPS
 
         void Log(string msg)
         {
-            if (!debugLogs) return;
-            Debug.Log($"[Voice] {msg}");
+            if (debugLogs) Debug.Log(msg);
         }
+
+        void HandleVoiceCommand(PendingCommand cmd)
+        {
+            var ui = _vui; // your property or reference to VoiceUI
+
+            // 1) Not mapped at all
+            if (!cmd.mapped)
+            {
+                ui?.ShowResult(false, "Unknown");
+                if (showHeardToast) UIHud.Instance?.Toast($"Voice: \"{cmd.raw}\" ?");
+                return;
+            }
+
+            // 2) Find interval def by semitones
+            var def = FindDefBySemitones(cmd.semis);
+            if (def == null)
+            {
+                ui?.ShowResult(false, "Unmapped");
+                if (showHeardToast) UIHud.Instance?.Toast($"Voice unmapped ({cmd.raw})");
+                return;
+            }
+
+            // 3) Submit to the quiz; show result immediately
+            bool ok = quiz.TrySubmitInterval(def.Value);
+            ui?.ShowResult(ok, def.Value.displayName);
+            if (showHeardToast) UIHud.Instance?.Toast($"Voice → {def.Value.displayName}");
+        }
+
+        void OnDisable()
+        {
+        #if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
+            if (recognizer != null && recognizer.IsRunning) recognizer.Stop();
+        #endif
+            isListening = false;
+            quiz?.SetVoiceListening(false);
+            _vui?.SetListening(false);
+        }
+
+
     }
+    
+    
 }

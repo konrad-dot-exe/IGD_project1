@@ -134,7 +134,7 @@ GameObject:
   - component: {fileID: 8176737651742628262}
   - component: {fileID: 6925227969715016285}
   m_Layer: 0
-  m_Name: ExplosionVFX
+  m_Name: MissileFizzle
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -164,7 +164,7 @@ ParticleSystem:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 8816461733047747226}
   serializedVersion: 8
-  lengthInSec: 0.2
+  lengthInSec: 0.1
   simulationSpeed: 1
   stopAction: 2
   cullingMode: 0
@@ -410,7 +410,7 @@ ParticleSystem:
     startSize:
       serializedVersion: 2
       minMaxState: 0
-      scalar: 0.3
+      scalar: 0.1
       minScalar: 1
       maxCurve:
         serializedVersion: 2
@@ -874,7 +874,7 @@ ParticleSystem:
     sphericalDirectionAmount: 0
     randomPositionAmount: 0
     radius:
-      value: 0.3
+      value: 0.1
       mode: 0
       spread: 0
       speed:
@@ -1103,7 +1103,7 @@ ParticleSystem:
       countCurve:
         serializedVersion: 2
         minMaxState: 0
-        scalar: 200
+        scalar: 100
         minScalar: 30
         maxCurve:
           serializedVersion: 2
@@ -5029,7 +5029,7 @@ MonoBehaviour:
   pointLight: {fileID: 6303269241732110569}
   ps: {fileID: 8111015986867348618}
   baseDuration: 0.5
-  durationScale: 4
+  durationScale: 1
   intensityCurve:
     serializedVersion: 2
     m_Curve:
@@ -5105,5 +5105,5 @@ MonoBehaviour:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
-  maxIntensity: 2000
-  baseRange: 160
+  maxIntensity: 1500
+  baseRange: 100

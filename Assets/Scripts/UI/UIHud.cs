@@ -77,9 +77,9 @@ namespace EarFPS
 
         public void FlashWrong()
         {
-            if (!screenFlash) return;
-            StopAllCoroutines();
-            StartCoroutine(FlashCo());
+            // if (!screenFlash) return;
+            // StopAllCoroutines();
+            // StartCoroutine(FlashCo());
         }
         System.Collections.IEnumerator FlashCo()
         {

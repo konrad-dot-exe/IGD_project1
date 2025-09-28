@@ -15,6 +15,7 @@ GameObject:
   - component: {fileID: 4343737221366160500}
   - component: {fileID: 3211141627807256035}
   - component: {fileID: 7831775033776305080}
+  - component: {fileID: 334967700711106268}
   m_Layer: 0
   m_Name: EnemyShip
   m_TagString: Untagged
@@ -34108,10 +34109,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 282ce6cea47622344832aa2666882ca7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  speed: 3
-  bombRadius: 2
+  speed: 5
+  bombRadius: 1.5
   emissiveRenderers:
   - {fileID: 0}
+  autoFindRenderers: 1
   palette:
   - {r: 0, g: 1, b: 1, a: 1}
   - {r: 0.45, g: 0.2, b: 1, a: 1}
@@ -34126,6 +34128,54 @@ MonoBehaviour:
     quality: 0
     number: 0
     semitones: 0
+--- !u!114 &334967700711106268
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2681286130506861975}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 77f2a85b9c09ce9429dffc6062532a3a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  target: {fileID: 0}
+  duration: 1
+  useUnscaledTime: 0
+  curve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 2.5
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 0.85
+      value: 1.05
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
 --- !u!1 &3468023852034693353
 GameObject:
   m_ObjectHideFlags: 0

@@ -201,21 +201,21 @@ namespace EarFPS
         
         public void PlayWrongAnswerFeedback()
         {
-            // punchy red strobe, a bit quicker than bomb
-            UIHud.Instance?.HitStrobe(
-                pulses: 3,
-                on: 0.045f,
-                off: 0.040f,
-                color: new Color(1f, 0.25f, 0.25f) // red tint
-            );
+            // // punchy red strobe, a bit quicker than bomb
+            // UIHud.Instance?.HitStrobe(
+            //     pulses: 3,
+            //     on: 0.045f,
+            //     off: 0.040f,
+            //     color: new Color(1f, 0.25f, 0.25f) // red tint
+            // );
 
-            Debug.Log($"[TrySubmit] wrong: paletteNull={SfxPalette.I == null}");
+            // Debug.Log($"[TrySubmit] wrong: paletteNull={SfxPalette.I == null}");
             // NEW: wrong-guess SFX (2D)
-            SfxPalette.I?.OnWrongGuess();
+            //SfxPalette.I?.OnWrongGuess();
 
             // small tap shake (so it's distinct from a bomb)
-            var shaker = FindFirstObjectByType<CameraShake>();
-            shaker?.Shake(duration: 0.18f, amplitude: 0.18f);
+            // var shaker = FindFirstObjectByType<CameraShake>();
+            // shaker?.Shake(duration: 0.18f, amplitude: 0.18f);
         }
 
 

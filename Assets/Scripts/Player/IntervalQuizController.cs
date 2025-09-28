@@ -20,12 +20,12 @@ namespace EarFPS
         [SerializeField] float minVolume = 0.25f;
         [SerializeField] float maxListenDist = 150f;
         [SerializeField] ListenZoom listenZoom;
-       
+
         [Header("Listen rate vs distance")]
-        [SerializeField] float noteGapFar   = 0.20f;  // gap BETWEEN note1 & note2 when far
-        [SerializeField] float noteGapNear  = 0.04f;  // ...when very close (tremolo feel)
-        [SerializeField] float pairGapFar   = 0.50f;  // gap AFTER the pair when far
-        [SerializeField] float pairGapNear  = 0.06f;  // ...when very close
+        [SerializeField] float noteGapFar = 0.20f;  // gap BETWEEN note1 & note2 when far
+        [SerializeField] float noteGapNear = 0.04f;  // ...when very close (tremolo feel)
+        [SerializeField] float pairGapFar = 0.50f;  // gap AFTER the pair when far
+        [SerializeField] float pairGapNear = 0.06f;  // ...when very close
 
         [Header("Input")]
         [SerializeField] Key submitKey = Key.Space;
@@ -56,8 +56,11 @@ namespace EarFPS
         [SerializeField] float duckAttack = 0.05f;   // fade down time
         [SerializeField] float duckRelease = 0.12f;  // fade up time
 
-        
+        [Header("Muzzle")]
+        [SerializeField] MuzzleRecoil muzzleRecoil; // drag your Muzzle here
 
+        [Header("Missile")]
+        [SerializeField] Color missileTint = new Color(0.30f, 0.90f, 1f);
 
         float duck = 1f;          // current duck multiplier
         Coroutine duckCo;
@@ -69,11 +72,17 @@ namespace EarFPS
         public int SelectedIndex => selectedIndex;
         public bool IsListening => listenLoop != null;
 
+        void Awake()
+        {
+            Debug.Log($"[IQC] Awake on {name} (instanceID={GetInstanceID()})");
+        }
+
         void OnEnable()
         {
             if (scrollAction == null)
                 scrollAction = new InputAction(type: InputActionType.Value, binding: "<Mouse>/scroll");
             scrollAction.Enable();
+            Debug.Log($"[IQC] OnEnable on {name} (instanceID={GetInstanceID()})");
         }
 
         void OnDisable()
@@ -84,6 +93,7 @@ namespace EarFPS
         void Start()
         {
             UIHud.Instance?.SetSelectedInterval(IntervalTable.ByIndex(selectedIndex));
+            if (!muzzleRecoil) muzzleRecoil = FindFirstObjectByType<MuzzleRecoil>();
         }
 
         void Update()
@@ -125,7 +135,7 @@ namespace EarFPS
                 (mouse != null && mouse.rightButton.isPressed) ||
                 (kb != null && optionalListenKey != Key.None && kb[optionalListenKey].isPressed);
 
-                        // start listening
+            // start listening
             if (listenHeld && listenLoop == null)
             {
                 listenLoop = StartCoroutine(ListenCoroutine());
@@ -159,7 +169,7 @@ namespace EarFPS
                 {
                     // ---- distance & volume ----
                     float dist = Vector3.Distance(transform.position, t.transform.position);
-                    float vol  = Mathf.Lerp(minVolume, 1f, 1f - Mathf.Clamp01(dist / maxListenDist));
+                    float vol = Mathf.Lerp(minVolume, 1f, 1f - Mathf.Clamp01(dist / maxListenDist));
                     vol = Mathf.Clamp01(vol * duck); // apply ducking
 
                     // ---- dynamic timing (closer = faster) ----
@@ -167,16 +177,16 @@ namespace EarFPS
                     closeness = Mathf.SmoothStep(0f, 1f, closeness); // nicer ramp near the end
 
                     float gapBetweenNotes = Mathf.Lerp(noteGapFar, noteGapNear, closeness);
-                    float gapAfterPair    = Mathf.Lerp(pairGapFar,  pairGapNear,  closeness);
+                    float gapAfterPair = Mathf.Lerp(pairGapFar, pairGapNear, closeness);
 
                     // ---- tone generation (with ADSR) ----
-                    float rootFreq   = ToneSynth.MidiToFreq(t.rootMidi);
+                    float rootFreq = ToneSynth.MidiToFreq(t.rootMidi);
                     float targetFreq = ToneSynth.MidiToFreq(t.rootMidi + t.interval.semitones);
 
                     // make clips long enough to include the release tail
                     float lenWithRelease = beepDur + envelope.release;
 
-                    var clip1 = ToneSynth.CreateTone(rootFreq,   lenWithRelease, toneSampleRate, waveform, 0.15f, envelope);
+                    var clip1 = ToneSynth.CreateTone(rootFreq, lenWithRelease, toneSampleRate, waveform, 0.15f, envelope);
                     var clip2 = ToneSynth.CreateTone(targetFreq, lenWithRelease, toneSampleRate, waveform, 0.15f, envelope);
 
                     // ---- play pair, overlapping naturally if release > gaps ----
@@ -194,8 +204,7 @@ namespace EarFPS
             }
         }
 
-
-
+        // Spacebar (or UI) submit using the wheel-selected interval
         void TrySubmit()
         {
             var t = turret.CurrentTarget;
@@ -204,21 +213,19 @@ namespace EarFPS
             var chosen = IntervalTable.ByIndex(selectedIndex);
             if (chosen.semitones == t.interval.semitones)
             {
-                var spawnPos = missileSpawn ? missileSpawn.position : transform.position;
-                var lookRot = Quaternion.LookRotation(t.transform.position - spawnPos);
-                var go = Instantiate(missilePrefab, spawnPos, lookRot);
-                go.GetComponent<HomingMissile>().Init(t);
-
-                // NEW: fire SFX
-                SfxPalette.I?.OnMissileFire(spawnPos);
-
+                // CORRECT:
+                FireMissile(t, dud:false);
                 GameManager.Instance.OnAnswer(true, t.interval);
                 UIHud.Instance?.ToastCorrect(t.interval.displayName, t.transform.position);
             }
             else
             {
+                // WRONG: fire a DUD + existing feedback
+                FireMissile(t, dud:true);
+
                 GameManager.Instance.OnAnswer(false, t.interval);
-                UIHud.Instance?.FlashWrong();
+                //UIHud.Instance?.FlashWrong();
+                GameManager.Instance.PlayWrongAnswerFeedback(); // if you already use this
                 StartCoroutine(Lockout());
             }
         }
@@ -244,30 +251,29 @@ namespace EarFPS
 
             if (chosen.semitones == t.interval.semitones)
             {
-                var spawnPos = missileSpawn ? missileSpawn.position : transform.position;
-                var lookRot = Quaternion.LookRotation(t.transform.position - spawnPos);
-                var go = Instantiate(missilePrefab, spawnPos, lookRot);
-                go.GetComponent<HomingMissile>().Init(t);
-
+                // CORRECT:
+                FireMissile(t, dud:false);
                 GameManager.Instance.OnAnswer(true, t.interval);
                 UIHud.Instance?.ToastCorrect(t.interval.displayName, t.transform.position);
             }
             else
             {
+                // WRONG: fire a DUD + existing feedback
+                FireMissile(t, dud:true);
+
                 GameManager.Instance.OnAnswer(false, t.interval);
-                UIHud.Instance?.FlashWrong();
-                // NEW: dramatic feedback for wrong guess
-                GameManager.Instance.PlayWrongAnswerFeedback();
+                //UIHud.Instance?.FlashWrong();
+                GameManager.Instance.PlayWrongAnswerFeedback(); // if you already use this
                 StartCoroutine(Lockout());
             }
             return true;
         }
-        
+
         public void SetVoiceListening(bool listening)
         {
             if (duckCo != null) StopCoroutine(duckCo);
             float target = listening ? duckedVolume : 1f;
-            float time   = listening ? duckAttack    : duckRelease;
+            float time = listening ? duckAttack : duckRelease;
             duckCo = StartCoroutine(DuckTo(target, time));
         }
 
@@ -285,7 +291,22 @@ namespace EarFPS
             duck = target;
             duckCo = null;
         }
+        
+        // --- shared fire routine ---
+        void FireMissile(EnemyShip t, bool dud)
+        {
+            var spawnPos = missileSpawn ? missileSpawn.position : transform.position;
+            var lookRot  = Quaternion.LookRotation(t.transform.position - spawnPos);
 
+            var go = Instantiate(missilePrefab, spawnPos, lookRot);
+            var hm = go.GetComponent<HomingMissile>();
+            hm.Init(t, dud, missileTint);  // ← pass the shared missile color
+            // use the prefab’s default tint, or replace with your chosen color
+            hm.SetTint(hm.defaultMissileTint);
+
+            muzzleRecoil?.Kick();
+            SfxPalette.I?.OnMissileFire(spawnPos);
+        }
 
     }
 }
