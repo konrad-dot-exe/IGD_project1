@@ -11,25 +11,35 @@ namespace EarFPS
         [Header("Camera")]
         [SerializeField] Camera cam;
         [SerializeField] float normalFOV = 60f;
-        [SerializeField] float zoomFOV   = 42f;
-        [SerializeField] float zoomInTime  = 0.12f;
+        [SerializeField] float zoomFOV = 42f;
+        [SerializeField] float zoomInTime = 0.12f;
         [SerializeField] float zoomOutTime = 0.10f;
 
         [Header("Post FX (URP Global Volume)")]
         [SerializeField] Volume globalVolume;           // drag your Global Volume here
         [SerializeField] bool driveVignette = true;
-        [SerializeField, Range(0f,1f)] float normalVignette = 0.25f;
-        [SerializeField, Range(0f,1f)] float zoomVignette   = 0.45f;
+        [SerializeField, Range(0f, 1f)] float normalVignette = 0.25f;
+        [SerializeField, Range(0f, 1f)] float zoomVignette = 0.45f;
 
         [Header("Overlay")]
         [SerializeField] CanvasGroup overlayGroup;      // e.g., a dim/scope UI image
-        [SerializeField, Range(0f,1f)] float overlayAlpha = 0.35f;
+        [SerializeField, Range(0f, 1f)] float overlayAlpha = 0.35f;
         [SerializeField] RectTransform overlayRect;    // usually same GO as overlayGroup
         [SerializeField] float overlayScaleNormal = 1.0f;
-        [SerializeField] float overlayScaleZoom   = 1.15f; // grows slightly when listening
+        [SerializeField] float overlayScaleZoom = 1.15f; // grows slightly when listening
 
         Vignette vignette;
         Coroutine co;
+
+        // Targets for the instant set (adjust if you already have these as fields)
+        [SerializeField] float normalFov = 60f;
+        [SerializeField] float listenFov = 52f;
+        [SerializeField] float normalVig = 0f;
+        [SerializeField] float listenVig = 0.25f;
+        [SerializeField] float normalAlpha = 0f;
+        [SerializeField] float listenAlpha = 1f;
+        [SerializeField] float normalScale = 1f;
+        [SerializeField] float listenScale = 1f;
 
         void Awake()
         {
@@ -82,5 +92,38 @@ namespace EarFPS
             if (overlayRect) overlayRect.localScale = s1;
             co = null;
         }
+
+        public void SetImmediate(bool on)
+        {
+            if (!cam) return;
+
+            cam.fieldOfView = on ? listenFov : normalFov;
+
+#if USING_URP
+            if (vignette && driveVignette)
+                vignette.intensity.value = on ? listenVig : normalVig;
+#endif
+
+            if (overlayGroup)
+                overlayGroup.alpha = on ? listenAlpha : normalAlpha;
+
+            if (overlayRect)
+                overlayRect.localScale = Vector3.one * (on ? listenScale : normalScale);
+        }
+        
+        public void Begin(bool on)
+        {
+            // If this GO is disabled (e.g., during scene reload), don’t try to start a coroutine.
+            if (!isActiveAndEnabled || !gameObject.activeInHierarchy)
+            {
+                SetImmediate(on);
+                return;
+            }
+
+            if (co != null) StopCoroutine(co);
+            co = StartCoroutine(Tween(on));   // <-- was Animate(on)
+        }
+
+        
     }
 }

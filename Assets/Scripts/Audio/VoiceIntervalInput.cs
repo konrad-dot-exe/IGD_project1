@@ -226,11 +226,18 @@ namespace EarFPS
         void OnDisable()
         {
         #if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
-            if (recognizer != null && recognizer.IsRunning) recognizer.Stop();
+            if (recognizer != null)
+            {
+                if (recognizer.IsRunning) recognizer.Stop();
+                recognizer.OnPhraseRecognized -= OnPhraseRecognized;
+                recognizer.Dispose();
+                recognizer = null;
+            }
         #endif
-            isListening = false;
-            quiz?.SetVoiceListening(false);
-            _vui?.SetListening(false);
+
+            // Skip resetting UI/zoom if things are being torn down
+            if (quiz && quiz.isActiveAndEnabled && quiz.gameObject.activeInHierarchy)
+                quiz.SetVoiceListening(false);
         }
 
 

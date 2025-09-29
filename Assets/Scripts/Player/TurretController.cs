@@ -49,6 +49,9 @@ namespace EarFPS
 
         void Update()
         {
+
+            if (Cursor.lockState != CursorLockMode.Locked) return;
+
             Vector2 delta = Mouse.current.delta.ReadValue();
             yaw += delta.x * sensitivity;
             pitch -= delta.y * sensitivity;

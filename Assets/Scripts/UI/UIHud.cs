@@ -15,7 +15,7 @@ namespace EarFPS
         [Header("Labels")]
         [SerializeField] TextMeshProUGUI scoreText;
         [SerializeField] TextMeshProUGUI timerText;
-        [SerializeField] TextMeshProUGUI remainingText;
+
         [SerializeField] TextMeshProUGUI accuracyText;
         [SerializeField] TextMeshProUGUI streakText;
         [SerializeField] TextMeshProUGUI selectedIntervalText;
@@ -49,7 +49,6 @@ namespace EarFPS
             int s = Mathf.FloorToInt(sec % 60f);
             timerText.text = $"Time: {m:00}:{s:00}";
         }
-        public void SetRemaining(int r) => remainingText.text = $"Remaining: {r}";
         public void SetAccuracy(int correct, int attempts)
         {
             float acc = attempts == 0 ? 0f : (100f * correct / attempts);

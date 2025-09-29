@@ -273,9 +273,17 @@ namespace EarFPS
         {
             if (duckCo != null) StopCoroutine(duckCo);
             float target = listening ? duckedVolume : 1f;
-            float time = listening ? duckAttack : duckRelease;
+            float time   = listening ? duckAttack   : duckRelease;
             duckCo = StartCoroutine(DuckTo(target, time));
+
+            if (listenZoom == null) return;
+
+            if (listenZoom.isActiveAndEnabled && listenZoom.gameObject.activeInHierarchy)
+                listenZoom.Begin(listening);        // animated coroutine version
+            else
+                listenZoom.SetImmediate(listening); // no coroutine; set values directly
         }
+
 
         IEnumerator DuckTo(float target, float time)
         {

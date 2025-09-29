@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections;
+using UnityEngine.SceneManagement;
 
 namespace EarFPS
 {
@@ -32,6 +33,18 @@ namespace EarFPS
         int remainingEnemies;
         bool gameOver = false;
         float elapsed = 0f;
+                // --- Run tracking (for end screen) ---
+        float  runStartTime;
+        int    enemiesDestroyed;
+        int    correctAnswers;
+        int    totalAnswers;
+        int    currentStreak;
+
+
+        [Header("Hit Points")]
+        [SerializeField] int maxHP = 3;
+        public int CurrentHP { get; private set; }
+        [SerializeField] HPDisplay hpUI;   // drag your HPDisplay here in the inspector
 
         [Header("Intervals Used In Game")]
         // Semitone distances that are allowed to spawn (edit in Inspector)
@@ -49,11 +62,29 @@ namespace EarFPS
         [SerializeField] TurretController turretCtrl;   // drag your Turret root here in the Inspector
         public Transform TurretTransform => turretCtrl ? turretCtrl.transform : null;
 
+        [Header("Lose Sequence")]
+        [SerializeField] EndScreenController endScreen;
+        // Optional knobs
+        [SerializeField] bool slowMoOnDeath = true;
+        [SerializeField] float slowMoFactor = 0.15f;  // 15% speed
+        [SerializeField] float slowMoHold = 0.40f;  // seconds at min speed (unscaled)
+        [SerializeField] float slowMoRecover = 0.40f;  // seconds back to 1.0 (unscaled)
+
+
+        bool _gameOverShown;
 
         void Start()
         {
+            CurrentHP = maxHP;
+            if (hpUI) { hpUI.Build(maxHP); hpUI.Set(CurrentHP); }
             remainingEnemies = waves * enemiesPerWave;
-            UIHud.Instance?.SetRemaining(remainingEnemies);
+                runStartTime      = Time.time;
+                score             = 0;
+                enemiesDestroyed  = 0;
+                correctAnswers    = 0;
+                totalAnswers      = 0;
+                bestStreak        = 0;
+                currentStreak     = 0;
             StartCoroutine(RunWaves());
         }
 
@@ -135,6 +166,7 @@ namespace EarFPS
             else
             {
                 streak = 0;
+                currentStreak = 0;
                 score = Mathf.Max(0, score - wrongPenalty);
                 UIHud.Instance?.SetScore(score, -wrongPenalty);
             }
@@ -144,7 +176,7 @@ namespace EarFPS
         public void OnEnemyDestroyed(EnemyShip _)
         {
             remainingEnemies--;
-            UIHud.Instance?.SetRemaining(remainingEnemies);
+            enemiesDestroyed++;
             if (remainingEnemies <= 0 && !gameOver)
             {
                 gameOver = true;
@@ -180,14 +212,25 @@ namespace EarFPS
 
         public void GameOver()
         {
-            if (gameOver) return;
-            gameOver = true;
+            if (_gameOverShown) return;
+            _gameOverShown = true;
 
-            // feedback
-            UIHud.Instance?.HitStrobe(3, 0.05f, 0.05f, Color.red);   
-            var shaker = FindFirstObjectByType<CameraShake>();
-            shaker?.Shake(0.28f, 0.28f);
-            UIHud.Instance?.ShowLose(score, elapsed, bestStreak, correct, attempts);
+            var stats = BuildRunStats();
+            StartCoroutine(DeathFlowCo(stats));
+        }
+
+        public void PlayerHit(int amount = 1)
+        {
+            CurrentHP = Mathf.Max(0, CurrentHP - amount);
+            hpUI?.Set(CurrentHP);
+
+            // existing “player bombed” feedback (screen flash, camera shake, SFX)
+            PlayWrongAnswerFeedback();              // or a dedicated PlayerBombed feedback
+
+            if (CurrentHP <= 0)
+            {
+                GameOver();
+            }
         }
 
 
@@ -198,7 +241,7 @@ namespace EarFPS
             var shaker = FindFirstObjectByType<CameraShake>();
             shaker?.Shake(0.28f, 0.28f);
         }
-        
+
         public void PlayWrongAnswerFeedback()
         {
             // // punchy red strobe, a bit quicker than bomb
@@ -217,6 +260,76 @@ namespace EarFPS
             // var shaker = FindFirstObjectByType<CameraShake>();
             // shaker?.Shake(duration: 0.18f, amplitude: 0.18f);
         }
+
+        RunStats BuildRunStats()
+        {
+            return new RunStats
+            {
+                score            = score,
+                timeSeconds      = Time.time - runStartTime,
+                enemiesDestroyed = enemiesDestroyed,
+                correct          = correctAnswers,
+                total            = totalAnswers,
+                bestStreak       = bestStreak,
+            };
+        }
+        
+        IEnumerator DeathFlowCo(RunStats stats)
+        {
+            // 1) brief death sequence (placeholder): red strobe + slow-mo
+            // reuse your existing feedback method if available
+            PlayWrongAnswerFeedback();    // strobe + small shake you already had
+
+            if (slowMoOnDeath)
+            {
+                float originalScale = Time.timeScale;
+                Time.timeScale = slowMoFactor;
+                float t = 0f;
+
+                // hold at min speed
+                while (t < slowMoHold)
+                {
+                    t += Time.unscaledDeltaTime;
+                    yield return null;
+                }
+
+                // recover to 1.0
+                t = 0f;
+                while (t < slowMoRecover)
+                {
+                    t += Time.unscaledDeltaTime;
+                    Time.timeScale = Mathf.Lerp(slowMoFactor, 1f, t / slowMoRecover);
+                    yield return null;
+                }
+                Time.timeScale = 1f;
+            }
+            else
+            {
+                // small delay so the strobe isn’t cut off
+                yield return new WaitForSecondsRealtime(0.6f);
+            }
+
+            endScreen.Show(stats);
+        }
+
+        public void RestartLevel()
+        {
+            // reset time scale in case we change this later
+            Time.timeScale = 1f;
+            Scene scene = SceneManager.GetActiveScene();
+            SceneManager.LoadScene(scene.buildIndex);
+        }
+
+        public void QuitToDashboard()
+        {
+            Time.timeScale = 1f;
+        #if UNITY_EDITOR
+            UnityEditor.EditorApplication.isPlaying = false;
+        #else
+            Application.Quit();
+        #endif
+        }
+
 
 
     }

@@ -69,9 +69,11 @@ namespace EarFPS
             if (to.sqrMagnitude <= bombRadius * bombRadius)
             {
                 GameManager.Instance.PlayHitFeedback(); // strobe + shake every time
+
+                GameManager.Instance.PlayerHit(1);   // -1 HP
                 SfxPalette.I?.OnPlayerBombed(transform.position);
 
-                GameManager.Instance.GameOver();        // your lose behavior
+                //GameManager.Instance.GameOver();        // your lose behavior
                 Destroy(gameObject);
             }
         }
