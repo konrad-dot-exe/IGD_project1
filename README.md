@@ -1,54 +1,41 @@
-# Unity + GitHub Starter Pack
+# EarFPS (Interval Aim Trainer)
 
-This repo contains ready-to-use config to version-control a Unity project on GitHub using **Git + Git LFS** and **UnityYAMLMerge**.
+A small Unity FPS-style ear-training game. You aim a turret, listen to a target interval, and speak the interval name to fire a guided missile. Correct answers destroy the enemy; wrong answers fire a **dud** that fizzles harmlessly against the enemy’s shield.
 
-## Quick Start
-1. Create a **new Unity (3D)** project.
-2. In Unity: **Edit → Project Settings**
-   - **Version Control** → **Visible Meta Files**
-   - **Asset Serialization** → **Force Text**
-   - **Line Endings** → **Unix (LF)**
-3. Quit Unity to flush settings.
-4. Copy the files from this starter pack into the **project root** (the folder that contains `Assets/`, `Packages/`, `ProjectSettings/`).
-5. In a terminal at the project root:
-   ```bash
-   git init
-   git lfs install
-   git add -A
-   git commit -m "Add Unity + GitHub starter pack"
-   # optional: set up remote
-   # git branch -M main
-   # git remote add origin <your-repo-url>
-   # git push -u origin main
-   ```
-6. (One-time per machine) register Unity’s smart merge tool (see `scripts/`).
+## Highlights
 
-## What each file is
+- **Voice input** (Windows `KeywordRecognizer`). Push-to-talk: **V**.  
+- **Two missile outcomes**  
+  - **Kill**: normal explosion & destroy.  
+  - **Dud**: identical flight; on impact, shield bubble flashes (enemy tint), missile fizzles (missile tint), no damage.
+- **Player HP**: starts at 3. Bomb hits reduce HP. On 0 HP → death sequence → end screen.
+- **End screen** overlay with stats and buttons (**Retry**, **Dashboard**).
+- Lightweight, component-driven architecture; most flows are centralized in `GameManager`.
 
-- **.gitignore**: Tells Git which files/folders to **ignore** (Unity caches, temp, IDE junk, build outputs). Keeps the repo clean and small.
-- **.gitattributes**: 
-  - Normalizes line endings for text files so teammates on different OSes don’t fight diffs.
-  - Routes Unity YAML assets (`*.unity`, `*.prefab`, etc.) to **UnityYAMLMerge** for conflict resolution.
-  - Sends large binary assets (art/audio/models/video/fonts) through **Git LFS** so they don’t bloat Git history.
-- **.editorconfig**: Defines consistent **code formatting** (indentation, line endings, charset) for C# across editors/IDEs.
-- **AI_README.md**: A short **project map** that orients AI coding assistants (and new teammates) to your folder layout and conventions.
-- **scripts/setup-unityyamlmerge-*.***: Convenience scripts to configure Git to use Unity’s YAML merge driver on your machine.
+## How to Play
 
-## After cloning on a new machine
-- Run `git lfs install` once.
-- Run the appropriate `setup-unityyamlmerge` script to register the merge driver.
+- **Aim** with mouse.  
+- **Listen / Speak**: hold **V** (push-to-talk), speak an interval (“major sixth”, “perfect fifth”, etc.), release **V** (you can keep holding; recognition is threaded).  
+- If recognized & correct → missile fires and destroys target. If wrong → dud missile fizzles on shield.
 
-## Large File Storage (LFS)
-We pattern-match common binary types to LFS. You can add more by extending the `*.ext filter=lfs` lines in `.gitattributes`.
+## Build & Run
 
-## File locking (optional)
-If artists are editing the same binary asset, enable LFS file locking:
-```bash
-git lfs install
-git config lfs.https://github.com/<user>/<repo>.locksverify true
-git lfs lock Assets/Art/character.fbx
-git lfs unlock Assets/Art/character.fbx
-```
+- **Unity**: _fill in your version_ (e.g., 2022.3 LTS, Built-in RP).  
+- **Target**: Windows x64 (voice recognition is Windows-only with `UnityEngine.Windows.Speech`).  
+- Open `SampleScene` and press Play.
 
-## UnityYAMLMerge
-Unity provides a merge tool that understands scenes/prefabs. The scripts below register it in your global Git config.
+## Project Structure
+
+- `Assets/Scripts/Core` — game flow (`GameManager`), scoring, HP, end screen, events (proposed).
+- `Assets/Scripts/Player` — camera/aim, recoil, quiz & submission, voice input.
+- `Assets/Scripts/Enemies` — enemy behaviour.
+- `Assets/Scripts/UI` — HUD, Voice UI, End Screen.
+- `Assets/Prefabs` — missiles, enemies, VFX (explosion, fizzle, shield bubble).
+- `Assets/Audio` — SFX; `SfxPalette` helper.
+
+## Status
+
+- Voice “processing pill” **removed** (design decision).  
+- Dud missile & shield bubble **implemented**.  
+- End screen flow **implemented** (pause, cursor unlock, buttons wired).  
+- Known polish items in **AI_HINTS.md**.
