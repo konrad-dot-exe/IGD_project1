@@ -36,9 +36,6 @@ namespace EarFPS
                 // --- Run tracking (for end screen) ---
         float  runStartTime;
         int    enemiesDestroyed;
-        int    correctAnswers;
-        int    totalAnswers;
-        int    currentStreak;
 
 
         [Header("Hit Points")]
@@ -60,7 +57,7 @@ namespace EarFPS
 
         // --- Turret reference (single source of truth) ---
         [SerializeField] TurretController turretCtrl;   // drag your Turret root here in the Inspector
-        public Transform TurretTransform => turretCtrl ? turretCtrl.transform : null;
+        public Transform TurretTransform => turretCtrl != null ? turretCtrl.transform : null;
 
         [Header("Lose Sequence")]
         [SerializeField] EndScreenController endScreen;
@@ -76,15 +73,16 @@ namespace EarFPS
         void Start()
         {
             CurrentHP = maxHP;
-            if (hpUI) { hpUI.Build(maxHP); hpUI.Set(CurrentHP); }
+            if (hpUI != null)
+            {
+                hpUI.Build(maxHP);
+                hpUI.Set(CurrentHP);
+            }
             remainingEnemies = waves * enemiesPerWave;
                 runStartTime      = Time.time;
                 score             = 0;
                 enemiesDestroyed  = 0;
-                correctAnswers    = 0;
-                totalAnswers      = 0;
                 bestStreak        = 0;
-                currentStreak     = 0;
             StartCoroutine(RunWaves());
         }
 
@@ -93,7 +91,11 @@ namespace EarFPS
             if (!gameOver)
             {
                 elapsed += Time.deltaTime;
-                UIHud.Instance?.SetTimer(elapsed);
+                var hud = UIHud.Instance;
+                if (hud != null)
+                {
+                    hud.SetTimer(elapsed);
+                }
             }
         }
 
@@ -120,10 +122,10 @@ namespace EarFPS
             if (!enemyPrefab) { Debug.LogError("Enemy Prefab missing"); return; }
 
             // --- center the arc on the turret's *clamp center direction* (world space) ---
-            Vector3 centerDir = turretCtrl ? turretCtrl.ClampCenterDir : Vector3.forward;
+            Vector3 centerDir = turretCtrl != null ? turretCtrl.ClampCenterDir : Vector3.forward;
 
             // keep spawns fully inside the clamp window
-            float allowedHalf = turretCtrl ? Mathf.Max(0f, turretCtrl.YawClampHalfAngle - edgePaddingDegrees) : 180f;
+            float allowedHalf = turretCtrl != null ? Mathf.Max(0f, turretCtrl.YawClampHalfAngle - edgePaddingDegrees) : 180f;
             float desiredHalf = spawnArcDegrees * 0.5f;
             float half = Mathf.Min(desiredHalf, allowedHalf);
 
@@ -154,6 +156,7 @@ namespace EarFPS
         public void OnAnswer(bool correctAns, IntervalDef interval)
         {
             attempts++;
+            var hud = UIHud.Instance;
             if (correctAns)
             {
                 correct++;
@@ -161,16 +164,25 @@ namespace EarFPS
                 bestStreak = Mathf.Max(bestStreak, streak);
                 int add = Mathf.RoundToInt(baseScore * (1f + 0.1f * Mathf.Clamp(streak - 1, 0, 10)));
                 score += add;
-                UIHud.Instance?.SetScore(score, add);
+                if (hud != null)
+                {
+                    hud.SetScore(score, add);
+                }
             }
             else
             {
                 streak = 0;
-                currentStreak = 0;
                 score = Mathf.Max(0, score - wrongPenalty);
-                UIHud.Instance?.SetScore(score, -wrongPenalty);
+                if (hud != null)
+                {
+                    hud.SetScore(score, -wrongPenalty);
+                }
             }
-            UIHud.Instance?.SetAccuracy(correct, attempts);
+
+            if (hud != null)
+            {
+                hud.SetAccuracy(correct, attempts);
+            }
         }
 
         public void OnEnemyDestroyed(EnemyShip _)
@@ -180,7 +192,11 @@ namespace EarFPS
             if (remainingEnemies <= 0 && !gameOver)
             {
                 gameOver = true;
-                UIHud.Instance?.ShowWin(score, elapsed, bestStreak, correct, attempts);
+                var hud = UIHud.Instance;
+                if (hud != null)
+                {
+                    hud.ShowWin(score, elapsed, bestStreak, correct, attempts);
+                }
             }
         }
 
@@ -216,13 +232,23 @@ namespace EarFPS
             _gameOverShown = true;
 
             var stats = BuildRunStats();
+            if (!isActiveAndEnabled)
+            {
+                // Component disabled (e.g., scene shutdown); finish the flow synchronously.
+                endScreen.Show(stats);
+                return;
+            }
+
             StartCoroutine(DeathFlowCo(stats));
         }
 
         public void PlayerHit(int amount = 1)
         {
             CurrentHP = Mathf.Max(0, CurrentHP - amount);
-            hpUI?.Set(CurrentHP);
+            if (hpUI != null)
+            {
+                hpUI.Set(CurrentHP);
+            }
 
             // existing “player bombed” feedback (screen flash, camera shake, SFX)
             PlayWrongAnswerFeedback();              // or a dedicated PlayerBombed feedback
@@ -237,9 +263,17 @@ namespace EarFPS
         public void PlayHitFeedback()
         {
             // 3-pulse strobe + subtle shake
-            UIHud.Instance?.HitStrobe(3, 0.05f, 0.05f, Color.red);
+            var hud = UIHud.Instance;
+            if (hud != null)
+            {
+                hud.HitStrobe(3, 0.05f, 0.05f, Color.red);
+            }
+
             var shaker = FindFirstObjectByType<CameraShake>();
-            shaker?.Shake(0.28f, 0.28f);
+            if (shaker != null)
+            {
+                shaker.Shake(0.28f, 0.28f);
+            }
         }
 
         public void PlayWrongAnswerFeedback()
@@ -268,8 +302,8 @@ namespace EarFPS
                 score            = score,
                 timeSeconds      = Time.time - runStartTime,
                 enemiesDestroyed = enemiesDestroyed,
-                correct          = correctAnswers,
-                total            = totalAnswers,
+                correct          = correct,
+                total            = attempts,
                 bestStreak       = bestStreak,
             };
         }
