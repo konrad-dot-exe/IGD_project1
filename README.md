@@ -37,5 +37,11 @@ A small Unity FPS-style ear-training game. You aim a turret, listen to a target 
 
 - Voice “processing pill” **removed** (design decision).  
 - Dud missile & shield bubble **implemented**.  
-- End screen flow **implemented** (pause, cursor unlock, buttons wired).  
+- End screen flow **implemented** (pause, cursor unlock, buttons wired).
 - Known polish items in **AI_HINTS.md**.
+
+## CHANGELOG
+
+- Align `GameManager` stats counters with the HUD display data and removed unused fields to keep end-screen summaries accurate.
+- Replaced Unity object null propagation with explicit checks to respect Unity's overloaded null semantics.
+- Guarded the death coroutine so the end screen still appears if the manager is disabled when game over triggers.
