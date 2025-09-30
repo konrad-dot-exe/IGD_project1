@@ -5,11 +5,11 @@
 ## Core
 - `Scripts/Core/GameManager.cs` — Run state (HP, score, timers, streaks), death flow, end screen hooks.
 - `Scripts/Core/EndScreenController.cs` — End screen UI, stats population, fade, button callbacks.
-- `Scripts/Core/RunStats.cs`
+- `Scripts/Core/RunStats.cs` 
 
 ## Audio
 - `Scripts/Audio/SfxPalette.cs` — Centralized SFX hooks (optional).
-- `Scripts/Audio/ToneSynth.cs` 
+- `Scripts/Audio/ToneSynth.cs` - Generates the tones for musical intervals
 - `Scripts/Player/VoiceIntervalInput.cs` — Windows speech; PTT **V**; grammar → `TrySubmitInterval`; uses thread-safe queue.
 
 ## Player
@@ -20,14 +20,14 @@
 ## Enemies & Combat
 - `Scripts/Enemies/EnemyShip.cs` — Enemy logic; exposes tint; damage to player.
 - `Scripts/Enemies/HomingMissile.cs` — Homing flight & outcome (kill/dud); VFX/SFX instantiation; `SetTint(Color)`.
-- `Scripts/Enemies/ShieldBubble.cs`
-- `Scripts/Enemies/SpawnAppear.cs`
+- `Scripts/Enemies/ShieldBubble.cs` - Enemy shield effect logic
+- `Scripts/Enemies/SpawnAppear.cs` - Enemy spawn effect logic
 
 ## Environment
-- `Scripts/Environment/ProceduralGround.cs`
+- `Scripts/Environment/ProceduralGround.cs` - Creates procedural terrain for ground plane
 
 ## FX
-- `Scripts/FX/ExplosionLightPulse.cs`
+- `Scripts/FX/ExplosionLightPulse.cs` - Lighting effect for explosions
 
 ## UI
 - `Scripts/UI/UIHud.cs` — HUD labels; HP icons.

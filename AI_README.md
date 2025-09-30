@@ -4,8 +4,8 @@ _Purpose_: Give an AI assistant a fast mental model of this project so its sugge
 
 ## Project Overview
 - **Game name**: _TODO_
-- **Unity version**: _e.g., 2022.3 LTS_ (keep ProjectVersion.txt in VCS)
-- **Render pipeline**: _Built-in / URP / HDRP_
+- **Unity version**: 6.0
+- **Render pipeline**: URP
 - **Entry scene**: `Assets/_Project/Scenes/_Boot.unity` (loads first playable scene)
 
 ## Folder Conventions
@@ -13,9 +13,6 @@ _Purpose_: Give an AI assistant a fast mental model of this project so its sugge
 Assets/
   _Project/
     Scripts/
-      Runtime/
-      Editor/
-      Tests/
     Art/
     Audio/
     Prefabs/
@@ -29,12 +26,6 @@ Assets/
 Packages/            # UPM manifest & embedded packages
 ProjectSettings/     # must be committed
 ```
-
-## Assembly Definitions
-Create asmdefs to speed up compile and clarify dependencies:
-- `Assets/_Project/Scripts/Runtime/Project.Core.asmdef`
-- `Assets/_Project/Scripts/Editor/Project.Editor.asmdef` (depends on `Project.Core`)
-- `Assets/_Project/Scripts/Tests/Project.Tests.asmdef`
 
 ## How to Extend
 - **New gameplay system** → add a folder under `Scripts/Runtime/Systems/Foo/` with a public entry point `FooSystem`.
