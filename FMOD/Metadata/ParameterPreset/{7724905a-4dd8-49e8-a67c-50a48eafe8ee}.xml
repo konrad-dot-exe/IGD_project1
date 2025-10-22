@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objects serializationModel="Studio.02.02.00">
+	<object class="ParameterPreset" id="{7724905a-4dd8-49e8-a67c-50a48eafe8ee}">
+		<property name="name">
+			<value>driveDestroyed</value>
+		</property>
+		<relationship name="folder">
+			<destination>{1cafe93c-0422-40b2-8482-bfa682fbcdbe}</destination>
+		</relationship>
+		<relationship name="parameter">
+			<destination>{9d868c12-c07d-4f31-b051-74a97654cfb8}</destination>
+		</relationship>
+	</object>
+	<object class="GameParameter" id="{9d868c12-c07d-4f31-b051-74a97654cfb8}">
+		<property name="initialValue">
+			<value>0</value>
+		</property>
+	</object>
+</objects>

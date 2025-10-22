@@ -205,7 +205,7 @@ namespace EarFPS
         }
 
         // Spacebar (or UI) submit using the wheel-selected interval
-        void TrySubmit()
+        public void TrySubmit()
         {
             var t = turret.CurrentTarget;
             if (t == null) return;
@@ -215,7 +215,7 @@ namespace EarFPS
             {
                 // CORRECT:
                 FireMissile(t, dud:false);
-                GameManager.Instance.OnAnswer(true, t.interval);
+                IntervalExerciseController.Instance.OnAnswer(true, t.interval);
                 UIHud.Instance?.ToastCorrect(t.interval.displayName, t.transform.position);
             }
             else
@@ -223,9 +223,9 @@ namespace EarFPS
                 // WRONG: fire a DUD + existing feedback
                 FireMissile(t, dud:true);
 
-                GameManager.Instance.OnAnswer(false, t.interval);
+                IntervalExerciseController.Instance.OnAnswer(false, t.interval);
                 //UIHud.Instance?.FlashWrong();
-                GameManager.Instance.PlayWrongAnswerFeedback(); // if you already use this
+                IntervalExerciseController.Instance.PlayWrongAnswerFeedback(); // if you already use this
                 StartCoroutine(Lockout());
             }
         }
@@ -253,7 +253,7 @@ namespace EarFPS
             {
                 // CORRECT:
                 FireMissile(t, dud:false);
-                GameManager.Instance.OnAnswer(true, t.interval);
+                IntervalExerciseController.Instance.OnAnswer(true, t.interval);
                 UIHud.Instance?.ToastCorrect(t.interval.displayName, t.transform.position);
             }
             else
@@ -261,9 +261,9 @@ namespace EarFPS
                 // WRONG: fire a DUD + existing feedback
                 FireMissile(t, dud:true);
 
-                GameManager.Instance.OnAnswer(false, t.interval);
+                IntervalExerciseController.Instance.OnAnswer(false, t.interval);
                 //UIHud.Instance?.FlashWrong();
-                GameManager.Instance.PlayWrongAnswerFeedback(); // if you already use this
+                IntervalExerciseController.Instance.PlayWrongAnswerFeedback(); // if you already use this
                 StartCoroutine(Lockout());
             }
             return true;

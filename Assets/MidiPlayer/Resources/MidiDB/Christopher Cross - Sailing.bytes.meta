@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: f72a1d8cbf5d920498bbf7ec3387b72d
+TextScriptImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 107994
+  packageName: Maestro - Midi Player Tool Kit - Free
+  packageVersion: 2.16.1
+  assetPath: Assets/MidiPlayer/Resources/MidiDB/Christopher Cross - Sailing.bytes
+  uploadId: 786004

@@ -33,6 +33,8 @@ namespace EarFPS
         Color currentColor = Color.cyan;    // stored palette color (not multiplied by intensity)
         public Color CurrentColor => currentColor;
 
+        bool _dead;
+
         void Awake()
         {
             if (autoFindRenderers || emissiveRenderers == null || emissiveRenderers.Length == 0)
@@ -68,22 +70,26 @@ namespace EarFPS
             // bomb when close
             if (to.sqrMagnitude <= bombRadius * bombRadius)
             {
-                GameManager.Instance.PlayHitFeedback(); // strobe + shake every time
+                IntervalExerciseController.Instance.PlayHitFeedback(); // strobe + shake every time
 
-                GameManager.Instance.PlayerHit(1);   // -1 HP
+                IntervalExerciseController.Instance.PlayerHit(1);   // -1 HP
                 SfxPalette.I?.OnPlayerBombed(transform.position);
 
-                //GameManager.Instance.GameOver();        // your lose behavior
+                //IntervalExerciseController.Instance.GameOver();        // your lose behavior
+                IntervalExerciseController.Instance.OnEnemyDestroyed(this);
                 Destroy(gameObject);
             }
         }
 
-        public void Die()   
+        public void Die()
         {
+            if (_dead) return;  // <— single-fire guard
+            _dead = true;
+            
             // Spawn the floating "Perfect Fifth!" at the enemy, slightly above it.
             UIHud.Instance?.ToastCorrect(interval.displayName, transform.position + Vector3.up * 1.2f);
 
-            GameManager.Instance.OnEnemyDestroyed(this);
+            IntervalExerciseController.Instance.OnEnemyDestroyed(this);
             Destroy(gameObject);
         }
 
@@ -111,7 +117,7 @@ namespace EarFPS
             return best;
         }
 
-        public void SetTarget(Transform t)          // called by GameManager after spawn
+        public void SetTarget(Transform t)          // called by IntervalExerciseController after spawn
         {
             target = t;
         }

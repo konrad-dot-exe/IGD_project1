@@ -1,6 +1,7 @@
 // Assets/Scripts/Player/MuzzleRecoil.cs
 using System.Collections;
 using UnityEngine;
+using UnityEngine.Events;
 
 namespace EarFPS
 {
@@ -20,7 +21,9 @@ namespace EarFPS
 
         [Header("Easing")]
         [SerializeField] AnimationCurve easeOut = AnimationCurve.EaseInOut(0, 0, 1, 1); // back
-        [SerializeField] AnimationCurve easeIn  = AnimationCurve.EaseInOut(0, 0, 1, 1); // return
+        [SerializeField] AnimationCurve easeIn = AnimationCurve.EaseInOut(0, 0, 1, 1); // return
+        
+        [SerializeField] UnityEvent onKick;
 
         Vector3 baseLocalPos;
         Coroutine co;
@@ -49,8 +52,9 @@ namespace EarFPS
 
         public void Kick()
         {
-            Debug.Log($"[MuzzleRecoil] Kick() on {name}  enabled={isActiveAndEnabled}  t={Time.time:0.000}");
+            //Debug.Log($"[MuzzleRecoil] Kick() on {name}  enabled={isActiveAndEnabled}  t={Time.time:0.000}");
             if (!isActiveAndEnabled) return;
+            onKick?.Invoke();               
             if (co != null) StopCoroutine(co);
             co = StartCoroutine(RecoilCo());
         }

@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: eeff484b06077294593b6cbeca428fc2
+TextScriptImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 107994
+  packageName: Maestro - Midi Player Tool Kit - Free
+  packageVersion: 2.16.1
+  assetPath: Assets/MidiPlayer/Resources/MidiDB/Satie - Gymnopedie 1.bytes
+  uploadId: 786004

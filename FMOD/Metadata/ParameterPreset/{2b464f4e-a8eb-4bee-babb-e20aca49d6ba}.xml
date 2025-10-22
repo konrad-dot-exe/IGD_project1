@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objects serializationModel="Studio.02.02.00">
+	<object class="ParameterPreset" id="{2b464f4e-a8eb-4bee-babb-e20aca49d6ba}">
+		<property name="name">
+			<value>cyberDistance</value>
+		</property>
+		<relationship name="folder">
+			<destination>{1cafe93c-0422-40b2-8482-bfa682fbcdbe}</destination>
+		</relationship>
+		<relationship name="parameter">
+			<destination>{c7b6b0ea-879a-4a92-9353-83586145c869}</destination>
+		</relationship>
+	</object>
+	<object class="GameParameter" id="{c7b6b0ea-879a-4a92-9353-83586145c869}">
+		<property name="initialValue">
+			<value>0</value>
+		</property>
+	</object>
+</objects>

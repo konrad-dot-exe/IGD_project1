@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: 378bdfcd7aee5224e8d9db01beaaa17d
+TextScriptImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 107994
+  packageName: Maestro - Midi Player Tool Kit - Free
+  packageVersion: 2.16.1
+  assetPath: Assets/MidiPlayer/Resources/MidiDB/Fire Emblem 3 - Theme.bytes
+  uploadId: 786004

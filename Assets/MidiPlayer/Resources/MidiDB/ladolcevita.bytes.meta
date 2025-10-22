@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: f7889f076f311834fb8ef7291948e895
+TextScriptImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 107994
+  packageName: Maestro - Midi Player Tool Kit - Free
+  packageVersion: 2.16.1
+  assetPath: Assets/MidiPlayer/Resources/MidiDB/ladolcevita.bytes
+  uploadId: 786004

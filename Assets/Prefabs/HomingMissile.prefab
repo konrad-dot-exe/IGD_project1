@@ -993,7 +993,7 @@ MonoBehaviour:
   shieldBubbleRadiusScale: 1
   vfxYOffset: 0
   vfxEmissionBoost: 6
-  defaultMissileTint: {r: 0.3726415, g: 1, b: 0.5006738, a: 1}
+  defaultMissileTint: {r: 0.37254906, g: 0.8812, b: 1, a: 1}
   trails: []
   lights: []
   missileTint: {r: 1, g: 1, b: 1, a: 1}

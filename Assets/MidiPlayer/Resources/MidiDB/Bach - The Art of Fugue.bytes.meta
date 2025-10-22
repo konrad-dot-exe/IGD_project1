@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: ee30cc16cd87da44b8a445c6d70ee1b4
+TextScriptImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 107994
+  packageName: Maestro - Midi Player Tool Kit - Free
+  packageVersion: 2.16.1
+  assetPath: Assets/MidiPlayer/Resources/MidiDB/Bach - The Art of Fugue.bytes
+  uploadId: 786004

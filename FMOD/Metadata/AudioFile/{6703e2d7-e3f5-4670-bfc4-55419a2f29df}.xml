@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objects serializationModel="Studio.02.02.00">
+	<object class="AudioFile" id="{6703e2d7-e3f5-4670-bfc4-55419a2f29df}">
+		<property name="assetPath">
+			<value>Music/marblemaze_gameover.mp3</value>
+		</property>
+		<property name="isStreaming">
+			<value>true</value>
+		</property>
+		<property name="frequencyInKHz">
+			<value>44.0999985</value>
+		</property>
+		<property name="channelCount">
+			<value>2</value>
+		</property>
+		<property name="length">
+			<value>26.671020408163265</value>
+		</property>
+		<relationship name="masterAssetFolder">
+			<destination>{f2ebb59c-0df8-4353-8218-ef129e20ef4b}</destination>
+		</relationship>
+	</object>
+</objects>

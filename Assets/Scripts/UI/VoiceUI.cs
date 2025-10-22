@@ -61,7 +61,7 @@ namespace EarFPS
         public void ShowResult(bool success, string label)
         {
             SetColor(success ? successColor : failColor);
-            SetText(success ? $"✓ {label}" : $"✗ {label}");
+            SetText(success ? $" {label}" : $" {label}");
             clearAt = Time.unscaledTime + resultHoldSeconds;
         }
 

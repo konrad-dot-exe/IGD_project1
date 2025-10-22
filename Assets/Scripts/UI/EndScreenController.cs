@@ -32,10 +32,13 @@ namespace EarFPS
             HideImmediate();
         }
 
-        public void Show(RunStats s)
+        public void Show(RunStats s, string titleOverride = null)
         {
             // 1) Set stats text
-            title.text = "MISSION FAILED";
+            if (!string.IsNullOrEmpty(titleOverride))
+                title.text = titleOverride;
+            else
+                title.text = "Challenege Failed!";
             statScore.text = $"Score: <b>{s.score:n0}</b>";
             statTime.text = $"Time: <b>{FormatTime(s.timeSeconds)}</b>";
             statAccuracy.text = $"Accuracy: <b>{(s.total > 0 ? Mathf.RoundToInt(100f * s.correct / s.total) : 0)}%</b>";

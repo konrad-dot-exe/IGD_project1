@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objects serializationModel="Studio.02.02.00">
+	<object class="ParameterPreset" id="{4547013a-af99-4935-94d7-f4a16c760e93}">
+		<property name="name">
+			<value>AmbiZone</value>
+		</property>
+		<relationship name="folder">
+			<destination>{1cafe93c-0422-40b2-8482-bfa682fbcdbe}</destination>
+		</relationship>
+		<relationship name="parameter">
+			<destination>{18cc03ce-1e2e-4f2a-88c0-91a5bdee04e0}</destination>
+		</relationship>
+	</object>
+	<object class="GameParameter" id="{18cc03ce-1e2e-4f2a-88c0-91a5bdee04e0}">
+		<property name="maximum">
+			<value>2</value>
+		</property>
+		<property name="initialValue">
+			<value>0</value>
+		</property>
+		<property name="seekSpeed">
+			<value>1.6999999284744263</value>
+		</property>
+		<property name="isExposedRecursively">
+			<value>false</value>
+		</property>
+	</object>
+</objects>

@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: c484f76037afe8c4e853f1ee6b6cf110
+TextScriptImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 107994
+  packageName: Maestro - Midi Player Tool Kit - Free
+  packageVersion: 2.16.1
+  assetPath: Assets/MidiPlayer/Resources/MidiDB/Liszt Saint-Saens - Danse Macabre.bytes
+  uploadId: 786004

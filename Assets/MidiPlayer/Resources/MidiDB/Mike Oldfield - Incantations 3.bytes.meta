@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: 42cf4371e8d9b4c40a362a117de2c872
+TextScriptImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 107994
+  packageName: Maestro - Midi Player Tool Kit - Free
+  packageVersion: 2.16.1
+  assetPath: Assets/MidiPlayer/Resources/MidiDB/Mike Oldfield - Incantations 3.bytes
+  uploadId: 786004

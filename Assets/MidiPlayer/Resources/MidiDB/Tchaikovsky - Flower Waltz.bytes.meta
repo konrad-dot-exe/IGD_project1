@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: cc8d7e878bb29544eaf9665d071c63af
+TextScriptImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 107994
+  packageName: Maestro - Midi Player Tool Kit - Free
+  packageVersion: 2.16.1
+  assetPath: Assets/MidiPlayer/Resources/MidiDB/Tchaikovsky - Flower Waltz.bytes
+  uploadId: 786004
