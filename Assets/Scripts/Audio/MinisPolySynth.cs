@@ -213,8 +213,8 @@ public class MinisPolySynth : MonoBehaviour
             {
                 // Fast LCG, normalized to [-1..1]
                 noiseState = 1664525u * noiseState + 1013904223u;
-                uint bits = (noiseState >> 9) | 0x3F800000u;   // 23-bit mantissa trick
-                float f = Mathf.FloatToHalf(bits);             // not available everywhere; fallback below
+                //uint bits = (noiseState >> 9) | 0x3F800000u;   // 23-bit mantissa trick
+                //float f = Mathf.FloatToHalf(bits);             // not available everywhere; fallback below
                 // Fallback (portable):
                 float rnd = ((noiseState & 0x00FFFFFFu) / 8388607.5f) - 1f; // [-1..1]
                 return rnd;

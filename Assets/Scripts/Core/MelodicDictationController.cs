@@ -1,3 +1,6 @@
+// MelodicDictationController.cs — wired to MelodyGenerator (Rule–Prob Hybrid)
+// Adds automatic reseeding of MelodyGenerator each round (via public Seed property).
+
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -19,8 +22,13 @@ namespace EarFPS
 
         [Header("Melody Settings")]
         public int noteCount = 5;
+        [Tooltip("Legacy base/range are only used if MelodyGenerator is not assigned.")]
         public int baseNote = 48;        // C3
         public int rangeSemitones = 12;  // one octave
+
+        [Header("Generator (optional)")]
+        [Tooltip("If assigned, this controller will call MelodyGenerator.Generate() and ignore baseNote/rangeSemitones.")]
+        [SerializeField] MelodyGenerator melodyGen;
 
         [Header("UI")]
         [SerializeField] RectTransform squaresParent;
@@ -61,63 +69,56 @@ namespace EarFPS
         // ---------- MIDI from MidiProbe ----------
         public void OnMidiNoteOn(int midiNoteNumber, float velocity)
         {
-            if (state != State.Listening)
-            {
-                if (log) Debug.Log($"[Dictation] Ignored note {midiNoteNumber} – state={state}");
-                return;
-            }
+            if (state != State.Listening) return;
 
-            if (inputIndex < 0 || inputIndex >= melody.Count)
-            {
-                if (log) Debug.LogWarning("[Dictation] inputIndex out of range.");
-                return;
-            }
+            if (inputIndex < 0 || inputIndex >= melody.Count) return;
 
             int expected = melody[inputIndex];
             int gotPC = NormalizePitchClass(midiNoteNumber);
             int expPC = NormalizePitchClass(expected);
 
-            if (log) Debug.Log($"[Dictation] Got {midiNoteNumber}({gotPC}) expected {expected}({expPC}) at idx={inputIndex}");
-
             if (gotPC == expPC)
             {
-                // Correct → clear this square
                 if (squares[inputIndex] != null)
                 {
-                    if (hideClearedSquares)
-                        squares[inputIndex].gameObject.SetActive(false);
-                    else
-                        squares[inputIndex].color = squareClearedColor;
+                    if (hideClearedSquares) squares[inputIndex].gameObject.SetActive(false);
+                    else squares[inputIndex].color = squareClearedColor;
                 }
 
                 inputIndex++;
 
-                // Completed sequence?
                 if (inputIndex >= melody.Count)
                 {
                     state = State.Idle;
-                    if (log) Debug.Log("[Dictation] ROUND COMPLETE");
                     StartCoroutine(WinThenNextRound());
                 }
             }
             else
             {
-                // Wrong → reset visual and replay same melody
-                if (log) Debug.Log("[Dictation] WRONG NOTE → reset and replay");
                 inputIndex = 0;
-                ResetSquaresVisual();   // also re-enables squares if hidden
+                ResetSquaresVisual();
                 ReplayMelody();
             }
         }
 
-        public void OnMidiNoteOff(int midiNoteNumber) { /* not used */ }
+        public void OnMidiNoteOff(int midiNoteNumber) { }
 
         // ---------- Flow ----------
         void StartRound()
         {
+            // reseed generator at round start
+            if (melodyGen != null)
+            {
+                melodyGen.Seed = Random.Range(int.MinValue, int.MaxValue);
+                if (log) Debug.Log($"[Dictation] New random seed set: {melodyGen.Seed}");
+
+                // Optional: keep generator length in sync with noteCount
+                melodyGen.Length = Mathf.Max(1, noteCount);
+            }
+
             BuildMelody();
             BuildSquares();
-            PlayMelodyFromTop();     // sets state correctly
+            PlayMelodyFromTop();
         }
 
         void ReplayMelody()
@@ -142,16 +143,13 @@ namespace EarFPS
             {
                 int note = melody[i];
 
-                // highlight
                 if (i < squares.Count && squares[i] != null && squares[i].gameObject.activeSelf)
                     squares[i].color = squareHighlightColor;
 
-                // sound
                 if (synth) synth.NoteOn(note, playbackVelocity);
                 yield return new WaitForSeconds(noteDuration);
                 if (synth) synth.NoteOff(note);
 
-                // return to base unless player already cleared it
                 if (i < squares.Count && squares[i] != null && squares[i].gameObject.activeSelf && i >= inputIndex)
                     squares[i].color = squareBaseColor;
 
@@ -160,7 +158,6 @@ namespace EarFPS
             }
 
             state = State.Listening;
-            if (log) Debug.Log("[Dictation] Now LISTENING");
         }
 
         IEnumerator WinThenNextRound()
@@ -174,14 +171,23 @@ namespace EarFPS
         void BuildMelody()
         {
             melody.Clear();
-            for (int i = 0; i < noteCount; i++)
+
+            if (melodyGen != null)
             {
-                int semis = Random.Range(0, rangeSemitones + 1);
-                int note = baseNote + semis;
-                note = ForceToCMajor(note);
-                melody.Add(note);
+                var gen = melodyGen.Generate();
+                for (int i = 0; i < gen.Count; i++) melody.Add(gen[i].midi);
             }
-            if (log) Debug.Log($"[Dictation] New melody: {string.Join(",", melody)}");
+            else
+            {
+                // Legacy fallback: random C-major in baseNote..baseNote+range
+                for (int i = 0; i < noteCount; i++)
+                {
+                    int semis = Random.Range(0, rangeSemitones + 1);
+                    int note = baseNote + semis;
+                    note = ForceToCMajor(note);
+                    melody.Add(note);
+                }
+            }
         }
 
         void BuildSquares()
