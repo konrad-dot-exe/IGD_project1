@@ -62,6 +62,7 @@ namespace EarFPS
         static readonly int[] DegreeOrder = { 0,2,4,5,7,9,11 }; // 1..7 → pitch classes for C major
 
         // ---- Public API ----
+        // Main entry point: generate a melody that obeys current settings.
         public List<MelodyNote> Generate()
         {
             // Clamp/validate
@@ -88,6 +89,7 @@ namespace EarFPS
 
             int i = 1; // position index
             int safety = 0; // deadlock guard
+            // Iteratively pick notes, with backtracking if the rule set deadlocks.
             while (i < length && safety++ < 10000)
             {
                 int prev = notes[i - 1].midi;
@@ -168,6 +170,7 @@ namespace EarFPS
         // ---- Candidate construction & weighting ----
         struct Candidate { public int midi; public float w; }
 
+        // Build a pool of diatonic candidates from the previous note and constraints.
         List<Candidate> BuildCandidates(int prev, int pos, int len, int minM, int maxM, bool mustResolveNext, int featuredUsed)
         {
             var list = new List<Candidate>(16);
@@ -197,6 +200,7 @@ namespace EarFPS
         }
 
         // Slightly prefer approach tones into any allowed end degree. If degree 1 is allowed, bias 2/7 → 1.
+        // Encourage approach tones so the melody ends on a desired degree gracefully.
         void ApplyApproachBias(List<Candidate> list, int prev, int minM, int maxM)
         {
             // Collect allowed end pitch-classes
@@ -218,6 +222,7 @@ namespace EarFPS
             }
         }
 
+        // Remove candidates that are not on an allowed final degree.
         void FilterToAllowedEndDegrees(List<Candidate> list)
         {
             // If no custom end degrees are set (all false), default to degree 1
@@ -230,6 +235,7 @@ namespace EarFPS
             }
         }
 
+        // Apply musical heuristics to weight each candidate option.
         void WeightCandidates(List<Candidate> list, int prev, int pos, int len, int minM, int maxM, int lastLeapAbsSteps, bool mustResolveNext, int featuredLeapsUsed)
         {
             if (list.Count == 0) return;
@@ -266,6 +272,7 @@ namespace EarFPS
             }
         }
 
+        // Difficulty-dependent base preference for various interval sizes.
         float BaseWeightForSteps(int steps)
         {
             switch (difficulty)
@@ -289,6 +296,7 @@ namespace EarFPS
             }
         }
 
+        // Compute a contour bias (e.g., rising, arch) for the current position.
         float DesiredDirectionBias(int pos, int len)
         {
             float t = (len <= 1) ? 0f : (pos / (float)(len - 1));
@@ -313,6 +321,7 @@ namespace EarFPS
             return bias * strength;
         }
 
+        // Encourage motion back toward the middle of the chosen register.
         float RangeElasticity(int prev, int cand, int minM, int maxM)
         {
             float center = (minM + maxM) * 0.5f;
@@ -324,6 +333,7 @@ namespace EarFPS
             return awayFromEdge;
         }
 
+        // Randomly pick an entry using its accumulated weight.
         int SampleByWeight(List<Candidate> list)
         {
             double sum = 0; foreach (var c in list) sum += c.w;
@@ -334,6 +344,7 @@ namespace EarFPS
             return list[list.Count - 1].midi;
         }
 
+        // Locate the index of a candidate by MIDI pitch (helper for stacks).
         int FindIndex(List<Candidate> list, int midi)
         {
             for (int i = 0; i < list.Count; i++) if (list[i].midi == midi) return i; return -1;
@@ -347,6 +358,7 @@ namespace EarFPS
             public int chosenIndex;
         }
 
+        // Backtracking routine: rewinds to an earlier decision and tries alternates.
         bool Backtrack(ref List<MelodyNote> notes, ref int pos, ref Stack<ChoiceFrame> stack)
         {
             // Safe backtrack that trims to decision index and tries alternatives
@@ -382,6 +394,7 @@ namespace EarFPS
             return false;
         }
 
+        // Fallback when backtracking fails: adjust seed / flags and keep going.
         bool RelaxOrReseed(ref List<MelodyNote> notes, ref int pos, int minM, int maxM, ref bool mustResolveNext)
         {
             seed = Hash(seed, pos);
@@ -390,6 +403,7 @@ namespace EarFPS
             return true;
         }
 
+        // Select an opening note based on allowed degrees and register weighting.
         int ChooseStart(int minM, int maxM)
         {
             var candidates = new List<int>(16);
@@ -421,6 +435,7 @@ namespace EarFPS
             return SampleByWeight(weighted);
         }
 
+        // --- Scale helpers ---
         static bool InRegister(int midi, int minM, int maxM) => midi >= minM && midi <= maxM;
         static bool IsInCMajor(int midi) => CMajorMask[Mod12(midi)];
         static int Mod12(int x) { int m = x % 12; return m < 0 ? m + 12 : m; }
@@ -452,6 +467,7 @@ namespace EarFPS
             if (arr == null) return false; for (int i = 0; i < arr.Length; i++) if (arr[i]) return true; return false;
         }
 
+        // Find the closest diatonic pitch to use as a final safety end note.
         static int NearestAllowedEndInRegister(int minM, int maxM, int center)
         {
             // Search nearest MIDI in register whose degree is allowed (prefers tonic if arrays unset)
@@ -468,12 +484,14 @@ namespace EarFPS
             return best;
         }
 
+        // Append all register notes that match the requested scale degree.
         void CollectDegreeInRegister(int degree, int minM, int maxM, List<int> outList)
         {
             int pc = DegreeOrder[Mathf.Clamp(degree - 1, 0, 6)];
             for (int m = minM; m <= maxM; m++) if (Mod12(m) == pc) outList.Add(m);
         }
 
+        // Move up/down the scale by a number of diatonic steps.
         int MoveDiatonic(int midi, int steps)
         {
             int dir = Math.Sign(steps);
@@ -497,6 +515,7 @@ namespace EarFPS
             return m;
         }
 
+        // Count diatonic steps (signed) between two notes.
         static int DiatonicDistance(int a, int b)
         {
             if (a == b) return 0;
@@ -511,6 +530,7 @@ namespace EarFPS
             return steps * dir;
         }
 
+        // Determine which diatonic intervals are legal for the current difficulty.
         int[] GetAllowedDiatonicSteps()
         {
             if (!allowLeaps) return new[] { 1 };
@@ -522,6 +542,7 @@ namespace EarFPS
             }
         }
 
+        // Pick a concrete contour when the setting is "Random".
         ContourType RandomContour()
         {
             var values = (ContourType[])Enum.GetValues(typeof(ContourType));
@@ -532,6 +553,7 @@ namespace EarFPS
 
         static IEnumerable<int> Indices(int n) { for (int i = 0; i < n; i++) yield return i; }
 
+        // Small helper hash to mutate the seed when we need to reseed mid-generation.
         static int Hash(int a, int b)
         {
             unchecked
