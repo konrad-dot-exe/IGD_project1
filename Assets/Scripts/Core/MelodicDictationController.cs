@@ -53,6 +53,8 @@ namespace EarFPS
 
         void Awake()
         {
+            // This is a UI-driven mini-game, so ensure the mouse cursor is usable when the
+            // scene loads and hook up button callbacks before any gameplay begins.
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible   = true;
 
@@ -63,6 +65,8 @@ namespace EarFPS
 
         void OnDestroy()
         {
+            // Avoid lingering event handlers if the component is destroyed while the app is
+            // still running (e.g. domain reloads inside the editor).
             if (replayButton) replayButton.onClick.RemoveListener(ReplayMelody);
         }
 
@@ -73,12 +77,14 @@ namespace EarFPS
 
             if (inputIndex < 0 || inputIndex >= melody.Count) return;
 
+            // Compare only the pitch class so that users can answer in any octave.
             int expected = melody[inputIndex];
             int gotPC = NormalizePitchClass(midiNoteNumber);
             int expPC = NormalizePitchClass(expected);
 
             if (gotPC == expPC)
             {
+                // Mark the square as completed so the player gets immediate feedback.
                 if (squares[inputIndex] != null)
                 {
                     if (hideClearedSquares) squares[inputIndex].gameObject.SetActive(false);
@@ -89,12 +95,14 @@ namespace EarFPS
 
                 if (inputIndex >= melody.Count)
                 {
+                    // Full melody was answered correctly: show win feedback then launch a new round.
                     state = State.Idle;
                     StartCoroutine(WinThenNextRound());
                 }
             }
             else
             {
+                // Wrong answer: restart the attempt from the top to keep the exercise consistent.
                 inputIndex = 0;
                 ResetSquaresVisual();
                 ReplayMelody();
@@ -123,12 +131,14 @@ namespace EarFPS
 
         void ReplayMelody()
         {
+            // Only one playback coroutine should run at a time so restart cleanly.
             if (playingCo != null) StopCoroutine(playingCo);
             PlayMelodyFromTop();
         }
 
         void PlayMelodyFromTop()
         {
+            // Reset listening state/UI before handing control to the playback coroutine.
             inputIndex = 0;
             ResetSquaresVisual();
             state = State.Playing;
@@ -137,12 +147,14 @@ namespace EarFPS
 
         IEnumerator PlayMelodyCo()
         {
+            // Allow a configurable count-in so players can prepare.
             if (preRollSeconds > 0f) yield return new WaitForSeconds(preRollSeconds);
 
             for (int i = 0; i < melody.Count; i++)
             {
                 int note = melody[i];
 
+                // Light up the current square to show progress during playback.
                 if (i < squares.Count && squares[i] != null && squares[i].gameObject.activeSelf)
                     squares[i].color = squareHighlightColor;
 
@@ -150,18 +162,22 @@ namespace EarFPS
                 yield return new WaitForSeconds(noteDuration);
                 if (synth) synth.NoteOff(note);
 
+                // Return the square to its idle colour once the note has sounded.
                 if (i < squares.Count && squares[i] != null && squares[i].gameObject.activeSelf && i >= inputIndex)
                     squares[i].color = squareBaseColor;
 
+                // Add a short rest between notes so successive pitches are easier to identify.
                 if (i < melody.Count - 1 && noteGap > 0f)
                     yield return new WaitForSeconds(noteGap);
             }
 
+            // Playback finished: start accepting answers.
             state = State.Listening;
         }
 
         IEnumerator WinThenNextRound()
         {
+            // Give the player a brief celebration/confirmation before clearing UI and starting again.
             yield return new WaitForSeconds(0.75f);
             ClearSquares();
             StartRound();
@@ -174,6 +190,7 @@ namespace EarFPS
 
             if (melodyGen != null)
             {
+                // Use the procedural generator so difficulty/contour settings are respected.
                 var gen = melodyGen.Generate();
                 for (int i = 0; i < gen.Count; i++) melody.Add(gen[i].midi);
             }
@@ -199,6 +216,7 @@ namespace EarFPS
 
             for (int i = 0; i < melody.Count; i++)
             {
+                // Squares act as progress indicators; spawn one per note in the melody.
                 var img = Instantiate(squarePrefab, squaresParent);
                 img.color = squareBaseColor;
                 img.gameObject.SetActive(true);
@@ -211,6 +229,7 @@ namespace EarFPS
             for (int i = 0; i < squares.Count; i++)
             {
                 if (!squares[i]) continue;
+                // Ensure each square is visible and in the base colour before replaying or retrying.
                 squares[i].gameObject.SetActive(true);
                 squares[i].color = squareBaseColor;
             }
@@ -219,6 +238,7 @@ namespace EarFPS
         void ClearSquares()
         {
             if (!squaresParent) return;
+            // Destroy any previous round's UI elements so we do not accumulate stale children.
             for (int i = squaresParent.childCount - 1; i >= 0; i--)
                 Destroy(squaresParent.GetChild(i).gameObject);
         }
