@@ -66,6 +66,7 @@ namespace EarFPS
         Coroutine messageCo;
         int score = 0;
 
+        // Prepare cursor / UI hooks when the controller comes alive.
         void Awake()
         {
             Cursor.lockState = CursorLockMode.None;
@@ -76,14 +77,17 @@ namespace EarFPS
             if (messageText) messageText.gameObject.SetActive(false);
         }
 
+        // Kick off the first dictation round as soon as we're running.
         void Start() => StartRound();
 
+        // Clean up listeners that were attached in Awake.
         void OnDestroy()
         {
             if (replayButton) replayButton.onClick.RemoveListener(ReplayMelody);
         }
 
         // ---------- MIDI from MidiProbe ----------
+        // MIDI hook invoked by MidiProbe: judges each incoming response note.
         public void OnMidiNoteOn(int midiNoteNumber, float velocity)
         {
             if (state != State.Listening) return;
@@ -131,9 +135,11 @@ namespace EarFPS
             }
         }
 
+        // We currently ignore note-off events (only pitch matters for grading).
         public void OnMidiNoteOff(int midiNoteNumber) { }
 
         // ---------- Flow ----------
+        // Start a fresh melody round (new melody + UI reset + playback).
         void StartRound()
         {
             // reseed generator at round start
@@ -149,12 +155,14 @@ namespace EarFPS
             PlayMelodyFromTop();
         }
 
+        // Replay the current melody for the player without changing state.
         void ReplayMelody()
         {
             if (playingCo != null) StopCoroutine(playingCo);
             PlayMelodyFromTop();
         }
 
+        // Reset progress and begin coroutine playback from the first note.
         void PlayMelodyFromTop()
         {
             inputIndex = 0;
@@ -163,6 +171,7 @@ namespace EarFPS
             playingCo = StartCoroutine(PlayMelodyCo());
         }
 
+        // Handles timed playback of each generated note and UI highlights.
         IEnumerator PlayMelodyCo()
         {
             if (preRollSeconds > 0f) yield return new WaitForSeconds(preRollSeconds);
@@ -188,6 +197,7 @@ namespace EarFPS
             state = State.Listening;
         }
 
+        // Brief pause after a win before preparing the next melody.
         IEnumerator WinThenNextRound()
         {
             yield return new WaitForSeconds(0.75f);
@@ -196,6 +206,7 @@ namespace EarFPS
         }
 
         // ---------- Melody & UI ----------
+        // Create the target melody using MelodyGenerator or fallback random logic.
         void BuildMelody()
         {
             melody.Clear();
@@ -218,6 +229,7 @@ namespace EarFPS
             }
         }
 
+        // Spawn the on-screen squares that represent each note in the melody.
         void BuildSquares()
         {
             ClearSquares();
@@ -234,6 +246,7 @@ namespace EarFPS
             }
         }
 
+        // Restore squares to their initial color / visibility for a new attempt.
         void ResetSquaresVisual()
         {
             for (int i = 0; i < squares.Count; i++)
@@ -244,6 +257,7 @@ namespace EarFPS
             }
         }
 
+        // Remove any existing square instances from the UI container.
         void ClearSquares()
         {
             if (!squaresParent) return;
@@ -252,12 +266,14 @@ namespace EarFPS
         }
 
         // ---------- Messaging & SFX ----------
+        // Display a temporary success/failure message in the HUD.
         void ShowMessage(string msg, Color color)
         {
             if (!messageText) return;
             if (messageCo != null) StopCoroutine(messageCo);
             messageCo = StartCoroutine(ShowMessageCo(msg, color));
         }
+        // Coroutine that shows a message for a fixed duration.
         IEnumerator ShowMessageCo(string msg, Color color)
         {
             messageText.text = msg;
@@ -266,6 +282,7 @@ namespace EarFPS
             yield return new WaitForSeconds(messageDuration);
             messageText.gameObject.SetActive(false);
         }
+        // Play a one-shot feedback sound if the clip/source are set.
         void PlaySfx(AudioClip clip)
         {
             if (!sfxSource || !clip) return;
@@ -273,6 +290,7 @@ namespace EarFPS
         }
 
         // ---------- Helpers ----------
+        // Refresh the score readout text.
         void UpdateScoreUI()
         {
             if (scoreText) scoreText.text = $"Score: {score}";
@@ -295,6 +313,7 @@ namespace EarFPS
         }
 
         // Optional hotkey to replay during testing
+        // Optional keyboard shortcut for debugging (R to replay).
         void Update()
         {
             if (Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame)

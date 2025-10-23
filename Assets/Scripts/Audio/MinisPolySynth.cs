@@ -42,12 +42,14 @@ public class MinisPolySynth : MonoBehaviour
     // PRNG state for audio-thread noise (LCG)
     private uint noiseState = 0x1234567u;
 
+    // Cache sample rate and allocate voice pool during initialization.
     void Awake()
     {
         sampleRate = AudioSettings.outputSampleRate;
         EnsureVoices();
     }
 
+    // When enabled, subscribe to MIDI devices and ensure state is valid.
     void OnEnable()
     {
         EnsureVoices();
@@ -58,6 +60,7 @@ public class MinisPolySynth : MonoBehaviour
         InputSystem.onDeviceChange += OnDeviceChange;
     }
 
+    // Unregister device callbacks to avoid leaks when disabled.
     void OnDisable()
     {
         InputSystem.onDeviceChange -= OnDeviceChange;
@@ -65,6 +68,7 @@ public class MinisPolySynth : MonoBehaviour
             Unsubscribe(dev);
     }
 
+    // Make sure we have the correct number of voice objects and a valid sample rate.
     void EnsureVoices()
     {
         int count = Mathf.Max(1, maxVoices);
@@ -76,6 +80,7 @@ public class MinisPolySynth : MonoBehaviour
         if (sampleRate <= 0) sampleRate = AudioSettings.outputSampleRate;
     }
 
+    // Respond to MIDI devices being added or removed while running.
     void OnDeviceChange(InputDevice device, InputDeviceChange change)
     {
         var md = device as MidiDevice;
@@ -84,12 +89,14 @@ public class MinisPolySynth : MonoBehaviour
         else if (change == InputDeviceChange.Removed) Unsubscribe(md);
     }
 
+    // Attach our handlers to a specific MIDI device.
     void Subscribe(MidiDevice dev)
     {
         dev.onWillNoteOn  += HandleNoteOn;
         dev.onWillNoteOff += HandleNoteOff;
     }
 
+    // Detach MIDI callbacks from a device.
     void Unsubscribe(MidiDevice dev)
     {
         dev.onWillNoteOn  -= HandleNoteOn;
@@ -97,6 +104,7 @@ public class MinisPolySynth : MonoBehaviour
     }
 
     // -------- MIDI --------
+    // Allocate/retune a voice when a MIDI note-on arrives from hardware.
     void HandleNoteOn(MidiNoteControl note, float velocity)
     {
         EnsureVoices();
@@ -110,6 +118,7 @@ public class MinisPolySynth : MonoBehaviour
         if (logVoices) Debug.Log($"NoteOn {note.noteNumber} -> voice assigned");
     }
 
+    // Begin envelope release for the voice that matches the MIDI note-off.
     void HandleNoteOff(MidiNoteControl note)
     {
         if (voices == null) return;
@@ -125,6 +134,7 @@ public class MinisPolySynth : MonoBehaviour
         }
     }
 
+    // Find an inactive voice slot (or steal the first one if all are busy).
     Voice FindFreeVoice()
     {
         for (int i = 0; i < voices.Length; i++)
@@ -133,6 +143,7 @@ public class MinisPolySynth : MonoBehaviour
     }
 
     // -------- AUDIO --------
+    // Unity audio callback: renders mixed samples for all active voices.
     void OnAudioFilterRead(float[] data, int channels)
     {
         if (voices == null || voices.Length == 0)
@@ -177,6 +188,7 @@ public class MinisPolySynth : MonoBehaviour
     }
 
     // Simple oscillator set
+    // Generate a single oscillator sample for the requested waveform.
     static float Osc(Waveform wf, double phase, float pulseWidth, ref uint noiseState)
     {
         const float TWO_PI = 2f * Mathf.PI;
@@ -222,6 +234,7 @@ public class MinisPolySynth : MonoBehaviour
         }
     }
 
+    // Convert MIDI pitch numbers to Hertz.
     public static float MidiToFreq(int midiNote)
     {
         return 440f * Mathf.Pow(2f, (midiNote - 69) / 12f);
