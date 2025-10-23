@@ -1,7 +1,6 @@
-// MelodyGenerator.cs — Rule–Probabilistic Hybrid v1.1
-// Adds Inspector-selectable start/end degree sets.
-// Generates short, musical, ear‑training‑friendly melodies for dictation.
-// Deterministic via seed, soft contour bias, difficulty‑based interval behavior, backtracking with soft‑rule relaxation.
+// MelodyGenerator.cs — Rule–Probabilistic Hybrid v1.2 (Modal)
+// Adds Inspector-selectable modal scales (C Ionian/Dorian/Phrygian/Lydian/Mixolydian/Aeolian).
+// Root remains C; degrees 1..7 map to the chosen mode. Anchors & difficulty logic unchanged.
 
 using System;
 using System.Collections.Generic;
@@ -12,11 +11,14 @@ namespace EarFPS
     public enum MelodyDifficulty { Beginner, Intermediate, Advanced }
     public enum ContourType { Any, Rising, Falling, Arch, InvertedArch, Random }
 
+    // NEW: modal selection (Locrian intentionally omitted)
+    public enum ScaleMode { Ionian, Dorian, Phrygian, Lydian, Mixolydian, Aeolian }
+
     [Serializable]
     public struct MelodyNote
     {
-        public int midi;            // absolute MIDI note number
-        public float durationSec;   // uniform in v1 (host can override)
+        public int midi;
+        public float durationSec;
         public MelodyNote(int midi, float dur) { this.midi = midi; this.durationSec = dur; }
         public override string ToString() => $"{midi}";
     }
@@ -27,15 +29,18 @@ namespace EarFPS
         [Header("Seed & Length")]
         [SerializeField] int seed = 12345;
         [SerializeField, Range(1, 64)] int length = 6;
-        [SerializeField] float noteDurationSec = 0.8f; // v1: uniform
+        [SerializeField] float noteDurationSec = 0.8f;
 
-        [Header("Pitch Space (v1 fixed to C major)")]
+        [Header("Scale / Mode (root fixed to C)")]
+        [SerializeField] ScaleMode mode = ScaleMode.Ionian;     // <- choose in Inspector
+
+        [Header("Pitch Space (register)")]
         [SerializeField] int registerMinMidi = 55; // G3
         [SerializeField] int registerMaxMidi = 72; // C5
 
         [Header("Behavior")]
         [SerializeField] MelodyDifficulty difficulty = MelodyDifficulty.Beginner;
-        [SerializeField] ContourType contour = ContourType.Random; // Random resolves at runtime
+        [SerializeField] ContourType contour = ContourType.Random;
         [Tooltip("When OFF, restrict to stepwise motion regardless of difficulty.")]
         [SerializeField] bool allowLeaps = true;
         [Tooltip("Probability that a leap resolves immediately by stepback; if not, next step is forced to resolve.")]
@@ -47,76 +52,79 @@ namespace EarFPS
         [Tooltip("Allowed END degrees within the key (1..7). Default: 1 only.")]
         [SerializeField] bool[] allowedEndDegrees   = new bool[7] { true, false, false, false, false, false, false };
 
-        // --- Public accessors ---
+        // Public accessors
         public int Seed { get => seed; set => seed = value; }
         public int Length { get => length; set => length = Mathf.Clamp(value, 1, 64); }
-        public bool[] AllowedStartDegrees => allowedStartDegrees; // arrays are reference types; edit via Inspector
+        public bool[] AllowedStartDegrees => allowedStartDegrees;
         public bool[] AllowedEndDegrees   => allowedEndDegrees;
 
-        // --- Internal state ---
+        // Internal state
         System.Random rng;
         ContourType resolvedContour;
 
-        // Scale (C major) pitch-class mask; C=0..B=11
-        static readonly bool[] CMajorMask = { true, false, true, false, true, true, false, true, false, true, false, true };
-        static readonly int[] DegreeOrder = { 0,2,4,5,7,9,11 }; // 1..7 → pitch classes for C major
+        // --- Mode data (C-based pitch classes for degrees 1..7) ---
+        // pc sets for each mode (tonic = C = degree 1)
+        static readonly int[] IonianPC      = { 0,2,4,5,7,9,11 };
+        static readonly int[] DorianPC      = { 0,2,3,5,7,9,10 };
+        static readonly int[] PhrygianPC    = { 0,1,3,5,7,8,10 };
+        static readonly int[] LydianPC      = { 0,2,4,6,7,9,11 };
+        static readonly int[] MixolydianPC  = { 0,2,4,5,7,9,10 };
+        static readonly int[] AeolianPC     = { 0,2,3,5,7,8,10 };
+
+        // runtime caches derived from mode
+        int[] degreeOrder;   // map degree 1..7 -> pitch-class
+        bool[] pcMask;       // 12-length mask of allowed pitch classes
 
         // ---- Public API ----
-        // Main entry point: generate a melody that obeys current settings.
         public List<MelodyNote> Generate()
         {
-            // Clamp/validate
+            // Resolve register
             int minM = Mathf.Min(registerMinMidi, registerMaxMidi);
             int maxM = Mathf.Max(registerMinMidi, registerMaxMidi);
-            if (maxM - minM < 6) maxM = minM + 6; // ensure some room
+            if (maxM - minM < 6) maxM = minM + 6;
+
+            // Resolve mode arrays
+            ResolveModeData();
 
             rng = new System.Random(seed);
             resolvedContour = (contour == ContourType.Random) ? RandomContour() : contour;
 
             var notes = new List<MelodyNote>(Mathf.Max(1, length));
 
-            // 1) Choose start note
+            // 1) Start note
             int start = ChooseStart(minM, maxM);
             notes.Add(new MelodyNote(start, noteDurationSec));
 
-            // Trackers for resolution/featured leaps
             bool mustResolveNext = false;
-            int lastLeapAbsSteps = 0; // diatonic steps magnitude of last move
+            int lastLeapAbsSteps = 0;
             int featuredLeapsUsed = 0;
 
-            // Cached for backtracking
             var choiceStack = new Stack<ChoiceFrame>();
+            int i = 1;
+            int safety = 0;
 
-            int i = 1; // position index
-            int safety = 0; // deadlock guard
-            // Iteratively pick notes, with backtracking if the rule set deadlocks.
             while (i < length && safety++ < 10000)
             {
                 int prev = notes[i - 1].midi;
                 var candidates = BuildCandidates(prev, i, length, minM, maxM, mustResolveNext, featuredLeapsUsed);
 
-                // If penultimate and specific end degrees are required, add slight approach bias
                 if (i == length - 1)
+                {
                     ApplyApproachBias(candidates, prev, minM, maxM);
-
-                // On final note, restrict to allowed end degrees
-                if (i == length - 1)
                     FilterToAllowedEndDegrees(candidates);
+                }
 
-                // No candidates? Backtrack / relax / reseed as per policy
                 if (candidates.Count == 0)
                 {
                     if (!Backtrack(ref notes, ref i, ref choiceStack))
                     {
                         if (RelaxOrReseed(ref notes, ref i, minM, maxM, ref mustResolveNext))
                             continue;
-                        else
-                            break; // give up (should be extremely rare)
+                        else break;
                     }
                     continue;
                 }
 
-                // Weight and select
                 WeightCandidates(candidates, prev, i, length, minM, maxM, lastLeapAbsSteps, mustResolveNext, featuredLeapsUsed);
                 if (candidates.Count == 0)
                 {
@@ -131,16 +139,14 @@ namespace EarFPS
 
                 int chosen = SampleByWeight(candidates);
 
-                // Push frame for possible backtrack (track rejected candidates)
                 choiceStack.Push(new ChoiceFrame { index = i, prevMidi = prev, options = candidates, chosenIndex = FindIndex(candidates, chosen) });
 
-                // Update resolution tracking
                 int diatonicSteps = Mathf.Abs(DiatonicDistance(prev, chosen));
                 bool isLeap = diatonicSteps >= 3;
                 if (isLeap)
                 {
                     bool resolveNow = rng.NextDouble() < immediateLeapResolutionProbability;
-                    mustResolveNext = !resolveNow; // if not resolved now, force next
+                    mustResolveNext = !resolveNow;
                     featuredLeapsUsed += 1;
                 }
                 else
@@ -153,41 +159,38 @@ namespace EarFPS
                 i++;
             }
 
-            // Ensure end anchor (allowed end degrees), as final safety net
+            // Final safety: enforce allowed end degree
             if (notes.Count > 0)
             {
-                int last = notes[notes.Count - 1].midi;
+                int last = notes[^1].midi;
                 if (!IsAllowedEndDegree(last))
                 {
-                    int fallback = NearestAllowedEndInRegister(minM, maxM, center: last);
-                    if (fallback >= 0) notes[notes.Count - 1] = new MelodyNote(fallback, noteDurationSec);
+                    int fallback = NearestAllowedEndInRegister(minM, maxM, last);
+                    if (fallback >= 0) notes[^1] = new MelodyNote(fallback, noteDurationSec);
                 }
             }
 
             return notes;
         }
 
-        // ---- Candidate construction & weighting ----
+        // ---------- Candidate construction & weighting ----------
         struct Candidate { public int midi; public float w; }
 
-        // Build a pool of diatonic candidates from the previous note and constraints.
         List<Candidate> BuildCandidates(int prev, int pos, int len, int minM, int maxM, bool mustResolveNext, int featuredUsed)
         {
             var list = new List<Candidate>(16);
-
             var allowedSteps = GetAllowedDiatonicSteps();
-            if (!allowLeaps) allowedSteps = new int[] { 1 }; // stepwise only
+            if (!allowLeaps) allowedSteps = new int[] { 1 };
 
             foreach (int steps in allowedSteps)
             {
                 int up = MoveDiatonic(prev, +steps);
                 int dn = MoveDiatonic(prev, -steps);
-
                 if (InRegister(up, minM, maxM)) list.Add(new Candidate { midi = up, w = 1f });
                 if (InRegister(dn, minM, maxM)) list.Add(new Candidate { midi = dn, w = 1f });
             }
 
-            list.RemoveAll(c => !IsInCMajor(c.midi));
+            list.RemoveAll(c => !IsInScale(c.midi));
 
             if (mustResolveNext && list.Count > 0)
             {
@@ -199,33 +202,19 @@ namespace EarFPS
             return list;
         }
 
-        // Slightly prefer approach tones into any allowed end degree. If degree 1 is allowed, bias 2/7 → 1.
-        // Encourage approach tones so the melody ends on a desired degree gracefully.
         void ApplyApproachBias(List<Candidate> list, int prev, int minM, int maxM)
         {
-            // Collect allowed end pitch-classes
-            var allowedEndPC = new bool[12];
-            for (int d = 1; d <= 7; d++) if (IsEndDegreeAllowed(d)) allowedEndPC[DegreeOrder[d - 1]] = true;
-
+            // If tonic is allowed, nudge penultimate degree 2/7 when appropriate
             for (int i = 0; i < list.Count; i++)
             {
                 int d = DegreeOf(list[i].midi);
-                // If tonic is allowed, encourage 2/7 as penultimate
                 if (IsEndDegreeAllowed(1) && (d == 2 || d == 7))
-                {
                     list[i] = new Candidate { midi = list[i].midi, w = list[i].w * 1.25f };
-                    continue;
-                }
-
-                // Generic: if moving toward any allowed end degree pitch-class next step, add a small boost
-                // (light bias; we keep it simple for v1.1)
             }
         }
 
-        // Remove candidates that are not on an allowed final degree.
         void FilterToAllowedEndDegrees(List<Candidate> list)
         {
-            // If no custom end degrees are set (all false), default to degree 1
             bool any = AnyTrue(allowedEndDegrees);
             for (int i = list.Count - 1; i >= 0; i--)
             {
@@ -235,7 +224,6 @@ namespace EarFPS
             }
         }
 
-        // Apply musical heuristics to weight each candidate option.
         void WeightCandidates(List<Candidate> list, int prev, int pos, int len, int minM, int maxM, int lastLeapAbsSteps, bool mustResolveNext, int featuredLeapsUsed)
         {
             if (list.Count == 0) return;
@@ -246,12 +234,11 @@ namespace EarFPS
                 int steps = Mathf.Abs(DiatonicDistance(prev, c.midi));
                 float baseW = BaseWeightForSteps(steps);
 
-                float dirPref = DesiredDirectionBias(pos, len); // -1..+1
+                float dirPref = DesiredDirectionBias(pos, len);
                 int dir = Math.Sign(c.midi - prev);
                 float contourFactor = 1f + 0.6f * dirPref * dir;
 
                 float rangeFactor = RangeElasticity(prev, c.midi, minM, maxM);
-
                 float resolutionFactor = (lastLeapAbsSteps >= 3 && steps == 1) ? 1.2f : 1f;
 
                 bool isLeap = steps >= 3;
@@ -266,13 +253,9 @@ namespace EarFPS
             }
 
             float sum = 0f; foreach (var c in list) sum += c.w;
-            if (sum <= 0f)
-            {
-                for (int i = 0; i < list.Count; i++) { var c = list[i]; c.w = 1f; list[i] = c; }
-            }
+            if (sum <= 0f) { for (int i = 0; i < list.Count; i++) { var c = list[i]; c.w = 1f; list[i] = c; } }
         }
 
-        // Difficulty-dependent base preference for various interval sizes.
         float BaseWeightForSteps(int steps)
         {
             switch (difficulty)
@@ -296,7 +279,6 @@ namespace EarFPS
             }
         }
 
-        // Compute a contour bias (e.g., rising, arch) for the current position.
         float DesiredDirectionBias(int pos, int len)
         {
             float t = (len <= 1) ? 0f : (pos / (float)(len - 1));
@@ -321,7 +303,6 @@ namespace EarFPS
             return bias * strength;
         }
 
-        // Encourage motion back toward the middle of the chosen register.
         float RangeElasticity(int prev, int cand, int minM, int maxM)
         {
             float center = (minM + maxM) * 0.5f;
@@ -333,7 +314,6 @@ namespace EarFPS
             return awayFromEdge;
         }
 
-        // Randomly pick an entry using its accumulated weight.
         int SampleByWeight(List<Candidate> list)
         {
             double sum = 0; foreach (var c in list) sum += c.w;
@@ -344,7 +324,6 @@ namespace EarFPS
             return list[list.Count - 1].midi;
         }
 
-        // Locate the index of a candidate by MIDI pitch (helper for stacks).
         int FindIndex(List<Candidate> list, int midi)
         {
             for (int i = 0; i < list.Count; i++) if (list[i].midi == midi) return i; return -1;
@@ -358,10 +337,8 @@ namespace EarFPS
             public int chosenIndex;
         }
 
-        // Backtracking routine: rewinds to an earlier decision and tries alternates.
         bool Backtrack(ref List<MelodyNote> notes, ref int pos, ref Stack<ChoiceFrame> stack)
         {
-            // Safe backtrack that trims to decision index and tries alternatives
             while (stack.Count > 0)
             {
                 var frame = stack.Pop();
@@ -394,7 +371,6 @@ namespace EarFPS
             return false;
         }
 
-        // Fallback when backtracking fails: adjust seed / flags and keep going.
         bool RelaxOrReseed(ref List<MelodyNote> notes, ref int pos, int minM, int maxM, ref bool mustResolveNext)
         {
             seed = Hash(seed, pos);
@@ -403,14 +379,12 @@ namespace EarFPS
             return true;
         }
 
-        // Select an opening note based on allowed degrees and register weighting.
         int ChooseStart(int minM, int maxM)
         {
             var candidates = new List<int>(16);
 
             if (allowedStartDegrees == null || allowedStartDegrees.Length != 7 || !AnyTrue(allowedStartDegrees))
             {
-                // Fallback to traditional 1/3/5 if the array is unset
                 CollectDegreeInRegister(1, minM, maxM, candidates);
                 CollectDegreeInRegister(3, minM, maxM, candidates);
                 CollectDegreeInRegister(5, minM, maxM, candidates);
@@ -420,9 +394,8 @@ namespace EarFPS
                 for (int d = 1; d <= 7; d++) if (IsStartDegreeAllowed(d)) CollectDegreeInRegister(d, minM, maxM, candidates);
             }
 
-            // If nothing collected (narrow register, etc.), allow any scale note as last resort
             if (candidates.Count == 0)
-                for (int m = minM; m <= maxM; m++) if (IsInCMajor(m)) candidates.Add(m);
+                for (int m = minM; m <= maxM; m++) if (IsInScale(m)) candidates.Add(m);
 
             int center = (minM + maxM) / 2;
             var weighted = new List<Candidate>(candidates.Count);
@@ -435,18 +408,36 @@ namespace EarFPS
             return SampleByWeight(weighted);
         }
 
-        // --- Scale helpers ---
-        static bool InRegister(int midi, int minM, int maxM) => midi >= minM && midi <= maxM;
-        static bool IsInCMajor(int midi) => CMajorMask[Mod12(midi)];
-        static int Mod12(int x) { int m = x % 12; return m < 0 ? m + 12 : m; }
+        // ---------- Mode helpers ----------
+        void ResolveModeData()
+        {
+            degreeOrder = mode switch
+            {
+                ScaleMode.Ionian     => IonianPC,
+                ScaleMode.Dorian     => DorianPC,
+                ScaleMode.Phrygian   => PhrygianPC,
+                ScaleMode.Lydian     => LydianPC,
+                ScaleMode.Mixolydian => MixolydianPC,
+                ScaleMode.Aeolian    => AeolianPC,
+                _ => IonianPC
+            };
 
-        static int DegreeOf(int midi)
+            pcMask = new bool[12];
+            for (int i = 0; i < 7; i++) pcMask[degreeOrder[i]] = true;
+        }
+
+        static int Mod12(int x) { int m = x % 12; return m < 0 ? m + 12 : m; }
+        static bool InRegister(int midi, int minM, int maxM) => midi >= minM && midi <= maxM;
+
+        bool IsInScale(int midi) => pcMask[Mod12(midi)];
+
+        int DegreeOf(int midi)
         {
             int pc = Mod12(midi);
-            for (int i = 0; i < 7; i++) if (DegreeOrder[i] == pc) return i + 1;
+            for (int i = 0; i < 7; i++) if (degreeOrder[i] == pc) return i + 1;
             return -1;
         }
-        static bool IsDegree(int midi, int degree) => DegreeOf(midi) == degree;
+        bool IsDegree(int midi, int degree) => DegreeOf(midi) == degree;
 
         bool IsStartDegreeAllowed(int degree)
         {
@@ -456,7 +447,7 @@ namespace EarFPS
         }
         bool IsEndDegreeAllowed(int degree)
         {
-            if (allowedEndDegrees == null || allowedEndDegrees.Length != 7) return degree == 1; // default to tonic
+            if (allowedEndDegrees == null || allowedEndDegrees.Length != 7) return degree == 1;
             int idx = Mathf.Clamp(degree - 1, 0, 6);
             return allowedEndDegrees[idx];
         }
@@ -464,59 +455,52 @@ namespace EarFPS
 
         static bool AnyTrue(bool[] arr)
         {
-            if (arr == null) return false; for (int i = 0; i < arr.Length; i++) if (arr[i]) return true; return false;
+            if (arr == null) return false;
+            for (int i = 0; i < arr.Length; i++) if (arr[i]) return true;
+            return false;
         }
 
-        // Find the closest diatonic pitch to use as a final safety end note.
-        static int NearestAllowedEndInRegister(int minM, int maxM, int center)
+        int NearestAllowedEndInRegister(int minM, int maxM, int center)
         {
-            // Search nearest MIDI in register whose degree is allowed (prefers tonic if arrays unset)
             int best = -1; int bestD = int.MaxValue;
             for (int m = minM; m <= maxM; m++)
             {
-                int deg = DegreeOf(m);
-                bool ok = true; // will be validated by caller via IsAllowedEndDegree; keep here minimal to avoid static ref
-                // We'll accept any diatonic; caller ensures degree allowed by replacing last note.
-                if (!IsInCMajor(m)) continue;
+                if (!IsInScale(m)) continue;
                 int d = Mathf.Abs(m - center);
                 if (d < bestD) { bestD = d; best = m; }
             }
             return best;
         }
 
-        // Append all register notes that match the requested scale degree.
         void CollectDegreeInRegister(int degree, int minM, int maxM, List<int> outList)
         {
-            int pc = DegreeOrder[Mathf.Clamp(degree - 1, 0, 6)];
+            int pc = degreeOrder[Mathf.Clamp(degree - 1, 0, 6)];
             for (int m = minM; m <= maxM; m++) if (Mod12(m) == pc) outList.Add(m);
         }
 
-        // Move up/down the scale by a number of diatonic steps.
+        // Diatonic stepping in current mode
         int MoveDiatonic(int midi, int steps)
         {
             int dir = Math.Sign(steps);
             int remain = Mathf.Abs(steps);
             int m = midi;
-            while (remain-- > 0)
-                m = (dir > 0) ? NextScaleNoteUp(m) : NextScaleNoteDown(m);
+            while (remain-- > 0) m = (dir > 0) ? NextScaleNoteUp(m) : NextScaleNoteDown(m);
             return m;
         }
-
-        static int NextScaleNoteUp(int midi)
+        int NextScaleNoteUp(int midi)
         {
             int m = midi + 1;
-            while (!IsInCMajor(m)) m++;
+            while (!IsInScale(m)) m++;
             return m;
         }
-        static int NextScaleNoteDown(int midi)
+        int NextScaleNoteDown(int midi)
         {
             int m = midi - 1;
-            while (!IsInCMajor(m)) m--;
+            while (!IsInScale(m)) m--;
             return m;
         }
 
-        // Count diatonic steps (signed) between two notes.
-        static int DiatonicDistance(int a, int b)
+        int DiatonicDistance(int a, int b)
         {
             if (a == b) return 0;
             int dir = Math.Sign(b - a);
@@ -530,19 +514,17 @@ namespace EarFPS
             return steps * dir;
         }
 
-        // Determine which diatonic intervals are legal for the current difficulty.
         int[] GetAllowedDiatonicSteps()
         {
             if (!allowLeaps) return new[] { 1 };
             switch (difficulty)
             {
-                case MelodyDifficulty.Beginner: return new[] { 1, 2 }; // step, third
-                case MelodyDifficulty.Intermediate: return new[] { 1, 2, 3, 4 }; // up to 5th
-                default: return new[] { 1, 2, 3, 4, 5, 6, 7 }; // up to octave
+                case MelodyDifficulty.Beginner:      return new[] { 1, 2 };
+                case MelodyDifficulty.Intermediate:  return new[] { 1, 2, 3, 4 };
+                default:                              return new[] { 1, 2, 3, 4, 5, 6, 7 };
             }
         }
 
-        // Pick a concrete contour when the setting is "Random".
         ContourType RandomContour()
         {
             var values = (ContourType[])Enum.GetValues(typeof(ContourType));
@@ -553,12 +535,11 @@ namespace EarFPS
 
         static IEnumerable<int> Indices(int n) { for (int i = 0; i < n; i++) yield return i; }
 
-        // Small helper hash to mutate the seed when we need to reseed mid-generation.
         static int Hash(int a, int b)
         {
             unchecked
             {
-                uint x = 0x9E3779B9u; // golden ratio 32-bit constant as uint
+                uint x = 0x9E3779B9u;
                 x ^= (uint)a + ((x << 6) + (x >> 2));
                 x ^= (uint)b + ((x << 6) + (x >> 2));
                 return (int)x;
@@ -569,8 +550,9 @@ namespace EarFPS
         [ContextMenu("Test Generate (Log)")]
         void TestGenerateLog()
         {
+            ResolveModeData();
             var mel = Generate();
-            Debug.Log($"[MelodyGenerator] seed={seed} diff={difficulty} contour={resolvedContour} len={mel.Count} : " + string.Join(",", mel));
+            Debug.Log($"[MelodyGenerator] seed={seed} mode={mode} diff={difficulty} contour={resolvedContour} len={mel.Count} : " + string.Join(",", mel));
         }
 #endif
     }

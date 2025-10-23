@@ -371,6 +371,9 @@ namespace EarFPS
             var stats = BuildRunStats();
             // Show the end screen with a win title
             endScreen.Show(stats, "Challenge Complete!");
+
+            MainMenuController.SetIntervalHighScore(score);
+
         }
 
     }

@@ -1,5 +1,6 @@
-// MelodicDictationController.cs — wired to MelodyGenerator (Rule–Prob Hybrid)
-// Adds: scoring, on-canvas messages, SFX for win/wrong.
+// MelodicDictationController.cs — Scoring & Game Over v1
+// Uses newly commented baseline; adds round-based timer, penalties, rewards, and Game Over flow.
+// No DSP scheduling; playback uses the existing coroutine path.
 
 using System.Collections;
 using System.Collections.Generic;
@@ -23,7 +24,6 @@ namespace EarFPS
 
         [Header("Melody Settings")]
         public int noteCount = 5;
-        [Tooltip("Legacy base/range are only used if MelodyGenerator is not assigned.")]
         public int baseNote = 48;        // C3
         public int rangeSemitones = 12;  // one octave
 
@@ -43,7 +43,7 @@ namespace EarFPS
 
         [Header("Scoring & Messaging")]
         [SerializeField] TMP_Text scoreText;           // Assign UIHud/ScoreText
-        [SerializeField] TMP_Text messageText;         // Create a TMP Text on Canvas and assign here
+        [SerializeField] TMP_Text messageText;         // Optional HUD text for pop-up messages
         [SerializeField] float messageDuration = 1.2f;
         [SerializeField] Color messageWinColor = new Color(0.2f, 1f, 0.6f, 1f);
         [SerializeField] Color messageWrongColor = new Color(1f, 0.4f, 0.3f, 1f);
@@ -52,6 +52,31 @@ namespace EarFPS
         [SerializeField] AudioSource sfxSource;        // Assign a 2D AudioSource on Canvas/GameRoot
         [SerializeField] AudioClip sfxWin;             // Play when full melody correct
         [SerializeField] AudioClip sfxWrong;           // Play when a note is wrong
+        [SerializeField] AudioClip sfxGameOver;        // Optional game-over sting
+
+        [Header("Scoring Tunables")]
+        [Tooltip("Score awarded for a fully-correct melody: pointsPerNote × melodyLength.")]
+        public int pointsPerNote = 100;
+        [Tooltip("Penalty applied on each wrong input note.")]
+        public int pointsWrongNote = -100;
+        [Tooltip("Penalty applied each time Replay is pressed (does not reset timer).")]
+        public int pointsReplay = -25;
+        [Tooltip("Continuous drain while Listening (negative value).")]
+        public float pointsPerSecondInput = -5f;
+        [Tooltip("Maximum wrong notes allowed per round before Game Over.")]
+        public int maxWrongPerRound = 3;
+
+        // Scoring state
+        int score = 0;
+        int wrongGuessesThisRound = 0;
+
+        // Run/session stats
+        float runStartTime = 0f;
+        int roundsCompleted = 0;
+
+        [Header("Game Over / End Screen")]
+        [Tooltip("If assigned, this shared End Screen will be shown on Game Over.")]
+        [SerializeField] EndScreenController endScreen; // Optional; shared with other module
 
         [Header("Debug")]
         [SerializeField] bool log = false;
@@ -59,35 +84,41 @@ namespace EarFPS
         enum State { Idle, Playing, Listening }
         State state = State.Idle;
 
+        // Melody & UI
         readonly List<int> melody = new();
         readonly List<Image> squares = new();
         int inputIndex = 0;
         Coroutine playingCo;
         Coroutine messageCo;
-        int score = 0;
 
-        // Prepare cursor / UI hooks when the controller comes alive.
+
+        // Round timer derived from potential points
+        float roundTimeBudgetSec = 0f;        // computed at StartRound
+        float roundTimeRemainingSec = 0f;     // counts down only while Listening
+        float drainAccumulator = 0f;          // accumulates fractional score drain between int UI updates
+
         void Awake()
         {
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible   = true;
 
-            if (replayButton) replayButton.onClick.AddListener(ReplayMelody);
+            if (replayButton) replayButton.onClick.AddListener(OnReplayButtonPressed);
             UpdateScoreUI();
             if (messageText) messageText.gameObject.SetActive(false);
         }
 
-        // Kick off the first dictation round as soon as we're running.
-        void Start() => StartRound();
+        void Start()
+        {
+            runStartTime = Time.time;
+            StartRound();
+        }
 
-        // Clean up listeners that were attached in Awake.
         void OnDestroy()
         {
-            if (replayButton) replayButton.onClick.RemoveListener(ReplayMelody);
+            if (replayButton) replayButton.onClick.RemoveListener(OnReplayButtonPressed);
         }
 
         // ---------- MIDI from MidiProbe ----------
-        // MIDI hook invoked by MidiProbe: judges each incoming response note.
         public void OnMidiNoteOn(int midiNoteNumber, float velocity)
         {
             if (state != State.Listening) return;
@@ -111,11 +142,12 @@ namespace EarFPS
                 // Completed sequence?
                 if (inputIndex >= melody.Count)
                 {
-                    // Score += length, win SFX & message
-                    score += melody.Count;
+                    int gain = Mathf.Max(0, pointsPerNote) * melody.Count;
+                    score += gain;
+                    roundsCompleted += 1;  
                     UpdateScoreUI();
                     PlaySfx(sfxWin);
-                    ShowMessage($"Great! +{melody.Count}", messageWinColor);
+                    ShowMessage($"Great! +{gain}", messageWinColor);
 
                     state = State.Idle;
                     StartCoroutine(WinThenNextRound());
@@ -123,11 +155,18 @@ namespace EarFPS
             }
             else
             {
-                // Wrong → score -1, message, SFX, reset visuals and replay same melody
-                score -= 1;
+                // Wrong → score penalty, increment per-round counter, then either game over or replay same melody
+                score += pointsWrongNote;
                 UpdateScoreUI();
                 PlaySfx(sfxWrong);
-                ShowMessage("Wrong note! -1", messageWrongColor);
+                ShowMessage($"Wrong note! {pointsWrongNote}", messageWrongColor);
+
+                wrongGuessesThisRound++;
+                if (wrongGuessesThisRound >= Mathf.Max(1, maxWrongPerRound))
+                {
+                    GameOver();
+                    return;
+                }
 
                 inputIndex = 0;
                 ResetSquaresVisual();
@@ -135,34 +174,47 @@ namespace EarFPS
             }
         }
 
-        // We currently ignore note-off events (only pitch matters for grading).
-        public void OnMidiNoteOff(int midiNoteNumber) { }
+        public void OnMidiNoteOff(int midiNoteNumber) { /* not used */ }
 
         // ---------- Flow ----------
-        // Start a fresh melody round (new melody + UI reset + playback).
         void StartRound()
         {
-            // reseed generator at round start
-            if (melodyGen != null)
-            {
-                melodyGen.Seed = Random.Range(int.MinValue, int.MaxValue);
-                if (log) Debug.Log($"[Dictation] New random seed set: {melodyGen.Seed}");
-                melodyGen.Length = Mathf.Max(1, noteCount);
-            }
+            
+            melodyGen.Seed = Random.Range(int.MinValue, int.MaxValue);
+            if (log) Debug.Log($"[Dictation] New random seed set: {melodyGen.Seed}");
+            melodyGen.Length = Mathf.Max(1, noteCount);
+            
+            wrongGuessesThisRound = 0;
+            drainAccumulator = 0f;
 
             BuildMelody();
             BuildSquares();
+
+            // Compute round time budget from potential points
+            float potential = Mathf.Max(0, pointsPerNote) * melody.Count;
+            float drainRate = Mathf.Abs(pointsPerSecondInput);
+            if (drainRate < 0.001f) drainRate = 0.001f; // guard against zero/near-zero
+            roundTimeBudgetSec = potential / drainRate;
+            roundTimeRemainingSec = roundTimeBudgetSec;
+            if (log) Debug.Log($"[Dictation] Round time budget = {roundTimeBudgetSec:F1}s (mel={melody.Count}, potential={potential}, drain/s={drainRate})");
+
             PlayMelodyFromTop();
         }
 
-        // Replay the current melody for the player without changing state.
+        void OnReplayButtonPressed()
+        {
+            // Apply replay penalty every time; timer does not reset (but will pause during playback)
+            score += pointsReplay;
+            UpdateScoreUI();
+            ReplayMelody();
+        }
+
         void ReplayMelody()
         {
             if (playingCo != null) StopCoroutine(playingCo);
             PlayMelodyFromTop();
         }
 
-        // Reset progress and begin coroutine playback from the first note.
         void PlayMelodyFromTop()
         {
             inputIndex = 0;
@@ -171,7 +223,6 @@ namespace EarFPS
             playingCo = StartCoroutine(PlayMelodyCo());
         }
 
-        // Handles timed playback of each generated note and UI highlights.
         IEnumerator PlayMelodyCo()
         {
             if (preRollSeconds > 0f) yield return new WaitForSeconds(preRollSeconds);
@@ -180,13 +231,16 @@ namespace EarFPS
             {
                 int note = melody[i];
 
+                // highlight
                 if (i < squares.Count && squares[i] != null && squares[i].gameObject.activeSelf)
                     squares[i].color = squareHighlightColor;
 
+                // sound
                 if (synth) synth.NoteOn(note, playbackVelocity);
                 yield return new WaitForSeconds(noteDuration);
                 if (synth) synth.NoteOff(note);
 
+                // return to base unless player already cleared it
                 if (i < squares.Count && squares[i] != null && squares[i].gameObject.activeSelf && i >= inputIndex)
                     squares[i].color = squareBaseColor;
 
@@ -194,10 +248,10 @@ namespace EarFPS
                     yield return new WaitForSeconds(noteGap);
             }
 
-            state = State.Listening;
+            state = State.Listening; // timer drain begins in Update()
+            if (log) Debug.Log("[Dictation] Now LISTENING");
         }
 
-        // Brief pause after a win before preparing the next melody.
         IEnumerator WinThenNextRound()
         {
             yield return new WaitForSeconds(0.75f);
@@ -229,7 +283,6 @@ namespace EarFPS
             }
         }
 
-        // Spawn the on-screen squares that represent each note in the melody.
         void BuildSquares()
         {
             ClearSquares();
@@ -246,7 +299,6 @@ namespace EarFPS
             }
         }
 
-        // Restore squares to their initial color / visibility for a new attempt.
         void ResetSquaresVisual()
         {
             for (int i = 0; i < squares.Count; i++)
@@ -257,7 +309,6 @@ namespace EarFPS
             }
         }
 
-        // Remove any existing square instances from the UI container.
         void ClearSquares()
         {
             if (!squaresParent) return;
@@ -266,14 +317,12 @@ namespace EarFPS
         }
 
         // ---------- Messaging & SFX ----------
-        // Display a temporary success/failure message in the HUD.
         void ShowMessage(string msg, Color color)
         {
             if (!messageText) return;
             if (messageCo != null) StopCoroutine(messageCo);
             messageCo = StartCoroutine(ShowMessageCo(msg, color));
         }
-        // Coroutine that shows a message for a fixed duration.
         IEnumerator ShowMessageCo(string msg, Color color)
         {
             messageText.text = msg;
@@ -282,15 +331,42 @@ namespace EarFPS
             yield return new WaitForSeconds(messageDuration);
             messageText.gameObject.SetActive(false);
         }
-        // Play a one-shot feedback sound if the clip/source are set.
         void PlaySfx(AudioClip clip)
         {
             if (!sfxSource || !clip) return;
             sfxSource.PlayOneShot(clip);
         }
 
+        // ---------- Game Over ----------
+        void GameOver()
+        {
+            if (log) Debug.Log("[Dictation] GAME OVER");
+            state = State.Idle;
+            if (playingCo != null) StopCoroutine(playingCo);
+
+            // stop any lingering synth notes (if your synth has a helper; otherwise safe to skip)
+            //if (synth != null) synth.AllNotesOff?.Invoke();
+
+            ShowMessage("Game Over", messageWrongColor);
+            PlaySfx(sfxGameOver);
+            MainMenuController.SetDictationHighScore(score);
+
+            if (endScreen != null)
+            {
+                var stats = BuildRunStats();
+
+                if (!isActiveAndEnabled)
+                {
+                    // Component disabled (e.g., scene shutdown); finish synchronously
+                    endScreen.ShowDictation(score, roundsCompleted, Time.time - runStartTime);
+                    return;
+                }
+
+                endScreen.ShowDictation(score, roundsCompleted, Time.time - runStartTime);
+            }
+        }
+
         // ---------- Helpers ----------
-        // Refresh the score readout text.
         void UpdateScoreUI()
         {
             if (scoreText) scoreText.text = $"Score: {score}";
@@ -312,12 +388,50 @@ namespace EarFPS
             return midiNote;
         }
 
-        // Optional hotkey to replay during testing
-        // Optional keyboard shortcut for debugging (R to replay).
+        RunStats BuildRunStats()
+        {
+            return new RunStats
+            {
+                score            = score,
+                timeSeconds      = Time.time - runStartTime,
+                enemiesDestroyed = 0,               // not used in this module
+                correct          = roundsCompleted, // repurpose as "rounds completed"
+                total            = roundsCompleted, // same for now; can change later
+                bestStreak       = 0,               // not tracked (yet)
+            };
+        }
+
+
         void Update()
         {
+            // Quick hotkey to replay during testing
             if (Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame)
-                ReplayMelody();
+                OnReplayButtonPressed();
+
+            // Round timer runs ONLY while Listening
+            if (state == State.Listening)
+            {
+                float drainRate = Mathf.Abs(pointsPerSecondInput);
+                if (drainRate < 0.001f) drainRate = 0.001f;
+
+                float dt = Time.deltaTime;
+                roundTimeRemainingSec = Mathf.Max(0f, roundTimeRemainingSec - dt);
+
+                // Accumulate drain and apply in whole-point steps for a stable UI
+                drainAccumulator += drainRate * dt; // positive magnitude
+                int whole = Mathf.FloorToInt(drainAccumulator);
+                if (whole > 0)
+                {
+                    score -= whole;
+                    drainAccumulator -= whole;
+                    UpdateScoreUI();
+                }
+
+                if (roundTimeRemainingSec <= 0f)
+                {
+                    GameOver();
+                }
+            }
         }
     }
 }

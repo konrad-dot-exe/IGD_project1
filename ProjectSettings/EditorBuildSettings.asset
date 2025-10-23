@@ -5,9 +5,18 @@ EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
   m_Scenes:
-  - enabled: 1
+  - enabled: 0
     path: Assets/Scenes/Interval Training.unity
     guid: 99c9720ab356a0642a771bea13969a05
+  - enabled: 1
+    path: Assets/Scenes/MainMenu.unity
+    guid: 89b330644cb509040bdce8495aa1a271
+  - enabled: 1
+    path: Assets/Scenes/IntervalTrainer.unity
+    guid: f3e9d72ea02346740b6cc0e69253e730
+  - enabled: 1
+    path: Assets/Scenes/MelodicDictation.unity
+    guid: 1e717f9909161d146a8344d818f36910
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   m_UseUCBPForAssetBundles: 0
