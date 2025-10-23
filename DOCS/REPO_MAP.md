@@ -3,8 +3,8 @@
 ## Table of Contents
 - [Top-Level Overview](#top-level-overview)
 - [Assets Breakdown](#assets-breakdown)
-- [Scenes](#scenes)
-- [Scripts Overview](#scripts-overview)
+  - [Scenes](#scenes)
+  - [Scripts](#scripts)
 - [What Not to Read First](#what-not-to-read-first)
 - [Next Steps](#next-steps)
 
@@ -12,58 +12,59 @@
 
 | Folder | Purpose | Notable Subfolders / Files |
 | --- | --- | --- |
-| `Assets/` | Core Unity content for the project. | Art, ListBox, Plugins, Prefabs, Resources, Scenes, Scripts, Settings, `TextMesh Pro`, `InputSystem_Actions.inputactions`. |
-| `FMOD/` | FMOD Studio project for adaptive audio and metadata integration. | `Metadata/`, `Sonoria.fspro`. |
-| `Packages/` | Unity-managed package manifest and lock data (do not edit manually). | — |
-| `ProjectSettings/` | Unity project configuration (rendering, input, platform settings). | — |
-| `YAML Scripts/` | Helper scripts to set up UnityYAMLMerge for version control. | `setup-unityyamlmerge-mac.sh`, `setup-unityyamlmerge-win.ps1`. |
+| `Assets/` | Unity project content: art, scenes, prefabs, code, and resources used at runtime. | See [Assets Breakdown](#assets-breakdown). |
+| `DOCS/` | Project documentation and reference notes. | Existing docs such as `FILES.md`; this map lives here. |
+| `FMOD/` | FMOD Studio project files for audio design and integration. | Root of FMOD banks and project structure. |
+| `Packages/` | Unity package manifest and lock data controlling dependencies. | Managed by Unity; do not edit manually. |
+| `ProjectSettings/` | Unity editor and player configuration assets. | Contains input, quality, and other project settings. |
+| `YAML Scripts/` | Supplemental YAML-based scripting or configuration samples. | Useful for reference but not part of compiled runtime. |
 
 ## Assets Breakdown
 
-| Folder | Purpose | Notable Subfolders / Files |
+| Subfolder | Purpose | Notable Contents |
 | --- | --- | --- |
-| `Assets/Art/` | Source art assets spanning audio, imagery, and materials. | Audio, Images, Materials, Models, `RT_Minimap.renderTexture`, Textures. |
-| `Assets/ListBox/` | Custom list box UI component and editor tooling. | `Editor/`, `ListBox.cs`. |
-| `Assets/MidiPlayer/` | *(Not present in this snapshot; likely expected to hold MIDI playback tooling—check history or external packages.)* | — |
-| `Assets/Plugins/` | Third-party plugins bundled with the project. | `CSharpSynth/`. |
-| `Assets/Prefabs/` | Reusable prefab game objects for gameplay and UI. | `EnemyShield.prefab`, `EnemyShip.prefab`, `ExplosionVFX.prefab`, `HomingMissile.prefab`, `Melodic Dictation/`, `MissileFizzle.prefab`, `WorldText.prefab`. |
-| `Assets/Resources/` | Dynamically loaded assets at runtime, including sound banks and MIDI data. | `Analog Bank/`, `FM Bank/`, `GM Bank/`, `Midis/`. |
-| `Assets/Scenes/` | Scene files defining playable and test environments. | `IntervalTrainer.unity`, `MelodicDictation.unity`, `SampleScene/`. |
-| `Assets/Scripts/` | Gameplay and systems code organized by discipline. | Audio, Core, Enemies, Environment, FX, Player, UI. |
-| `Assets/Settings/` | Rendering pipeline and volume profiles for URP configurations. | `DefaultVolumeProfile.asset`, `Mobile_RPAsset.asset`, `Mobile_Renderer.asset`, `PC_RPAsset.asset`, `PC_Renderer.asset`, `SampleSceneProfile.asset`, `UniversalRenderPipelineGlobalSettings.asset`. |
-| `Assets/TextMesh Pro/` | Unity TextMesh Pro package assets (fonts, shaders, samples). | `Examples & Extras/`, Fonts, Resources, Shaders, Sprites. |
+| `Art/` | Source art assets such as textures and sprites for UI and gameplay. | Organize visuals for in-game presentation. |
+| `ListBox/` | Custom list box UI components and supporting assets. | Prefabs, scripts, or styles enabling list selection widgets. |
+| `MidiPlayer/` | (Not present at top level) Placeholder for MIDI playback tooling mentioned in project context. | Confirm if stored under another path before use. |
+| `Plugins/` | Third-party native plugins or managed libraries required by the project. | Drop-in vendor DLLs or frameworks. |
+| `Prefabs/` | Reusable prefabbed game objects for scenes. | Group gameplay/UI building blocks. |
+| `Resources/` | Assets loaded dynamically at runtime via `Resources.Load`. | Keep runtime-critical data accessible. |
+| `Scenes/` | Scene definitions for different game states. | See [Scenes](#scenes). |
+| `Scripts/` | C# gameplay and systems scripts. | See [Scripts](#scripts). |
+| `Settings/` | ScriptableObject configuration assets controlling game tuning. | Stores gameplay, audio, or UI settings data. |
+| `TextMesh Pro/` | Bundled TextMesh Pro assets (fonts, materials, examples). | Largely vendor-provided resources. |
+| `InputSystem_Actions.inputactions` | Unity Input System action map asset. | Defines input bindings referenced in code. |
 
-## Scenes
+### Scenes
 
 | Scene | Description |
 | --- | --- |
-| `Assets/Scenes/IntervalTrainer.unity` | Interval training gameplay scene—likely focuses on musical interval drills. |
-| `Assets/Scenes/MelodicDictation.unity` | Melodic dictation scene for practicing transcription exercises. |
-| `Assets/Scenes/SampleScene/` | Default Unity sample scene folder kept for reference or testing. |
+| `IntervalTrainer.unity` | Interactive scene likely focused on interval ear-training exercises. |
+| `MainMenu.unity` | Entry point menu for navigating to core modes. |
+| `MelodicDictation.unity` | Gameplay scene for melodic dictation practice. |
 
-## Scripts Overview
+### Scripts
 
-| Folder | Focus |
+| Folder | Overview |
 | --- | --- |
-| `Assets/Scripts/Audio/` | Audio playback, synthesis, and integration logic for gameplay and training modes. |
-| `Assets/Scripts/Core/` | Foundational systems such as game managers, state handling, and shared utilities. |
-| `Assets/Scripts/Enemies/` | Enemy ship behaviors and AI challenges used in training scenarios. |
-| `Assets/Scripts/Environment/` | World setup, level elements, and environmental interactions. |
-| `Assets/Scripts/FX/` | Visual and audio effects triggers and controllers. |
-| `Assets/Scripts/Player/` | Player controls, input handling, and character logic. |
-| `Assets/Scripts/UI/` | User interface flow, HUD elements, and menu interactions. |
+| `Audio/` | Handles music playback, sound effects, and integration with FMOD or MIDI systems. |
+| `Core/` | Fundamental game systems such as managers, utilities, and shared infrastructure. |
+| `Enemies/` | Logic for adversarial elements or challenge generators within practice modes. |
+| `Environment/` | Controls environmental objects, scenery, or world interactions. |
+| `FX/` | Visual effect controllers and particle orchestration. |
+| `Player/` | Player avatar or user interaction handling, including input and progression. |
+| `UI/` | User interface behaviour scripts for menus, HUDs, and widgets. |
 
 ## What Not to Read First
 
-- `Assets/TextMesh Pro/` – Vendor package content; stick to official docs unless customizing fonts or shaders.
-- `Assets/Plugins/CSharpSynth/` – Third-party MIDI synthesis implementation; treat as black box unless debugging audio playback internals.
-- `Packages/` and `ProjectSettings/` – Unity-generated configuration; review via Unity Editor rather than manual edits.
-- `Assets/Resources/Analog Bank`, `FM Bank`, `GM Bank` – Large audio bank data with minimal explanatory context.
-- `FMOD/` – Detailed audio authoring project; explore only when focusing on adaptive audio design.
+- `TextMesh Pro/` — vendor package content; reference only when editing fonts/materials.
+- `Plugins/` — third-party binaries with little explanatory value.
+- `ProjectSettings/` — Unity-generated settings assets; review only when adjusting project-wide configuration.
+- `InputSystem_Actions.inputactions` — machine-authored asset best inspected through the Unity editor.
 
 ## Next Steps
 
-- [ ] Draft scene briefs summarizing goals, key prefabs, and entry points for each gameplay scene.
-- [ ] Map inspector wiring for major managers (especially in `Assets/Scripts/Core`) to show serialized dependencies.
-- [ ] Outline event-flow diagrams covering audio triggers between `CSharpSynth`/FMOD and gameplay scripts.
-- [ ] Catalog critical prefabs with their scripts and configurable parameters for quick reference.
+- [ ] Draft scene briefs outlining goals, key prefabs, and entry points for each Unity scene.
+- [ ] Map inspector wiring for critical prefabs and ScriptableObjects to clarify dependencies.
+- [ ] Document audio signal flow between MIDI, FMOD, and in-game triggers.
+- [ ] Create an event-flow diagram covering player input through gameplay feedback loops.
