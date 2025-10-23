@@ -1,83 +1,76 @@
 # Melodic Dictation Scene
 
 ## Overview
-Melodic Dictation teaches players to recognize and reproduce short diatonic melodies: the controller builds a random C-major phrase, plays it back through the in-scene synth while highlighting visual steps, then listens for the learner to echo the pattern on a MIDI keyboard before automatically rolling into the next challenge.【F:Assets/Scripts/Core/MelodicDictationController.cs†L19-L88】【F:Assets/Scripts/Core/MelodicDictationController.cs†L117-L170】
+- Dictation loop now layers scoring, time pressure, and end-screen stats on top of the classic "listen → echo" exercise.
+- `MelodicDictationController` autogenerates a melody (via `melodyGen.Generate()` if provided, or C-major fallback), plays it through `MinisPolySynth`, then listens for octave-agnostic matches from hardware MIDI routed by `MidiProbe`.【F:Assets/Scripts/Core/MelodicDictationController.cs†L24-L121】【F:Assets/Scripts/Audio/MinisPolySynth.cs†L114-L163】【F:Assets/Scripts/Audio/MIDIProbe.cs†L8-L61】
+- Each round awards points for perfect runs, penalizes mistakes/replays/slow responses, and can trigger `EndScreenController.ShowDictation` on failure.【F:Assets/Scripts/Core/MelodicDictationController.cs†L50-L210】
 
-## Inputs supported
-- Hardware MIDI keyboards routed through the Minis package; `MidiProbe` forwards `NoteOn`/`NoteOff` events to both the synth and the dictation controller.【F:Assets/Scripts/Audio/MIDIProbe.cs†L8-L57】【F:Assets/Scripts/Audio/MIDIProbe.cs†L60-L71】
-- No on-screen piano is instantiated in this scene, but the controller’s MIDI API matches the shared Piano UI scripts if a virtual keyboard is later added.【F:Assets/Scripts/Core/MelodicDictationController.cs†L47-L88】
+## Inputs & Audio Path
+- Hardware MIDI keyboards are the only input source; `MidiProbe` logs connectivity, echoes notes through `synth`, and forwards events to the controller (note-off passthrough keeps envelopes clean).【F:Assets/Scripts/Audio/MIDIProbe.cs†L12-L63】
+- Playback and monitoring share a single `MinisPolySynth` (`waveform`, `pulseWidth`, `attack`, `release`, etc. are tweakable). Scripted `NoteOn/NoteOff` calls reuse the same voice allocator as hardware input.【F:Assets/Scripts/Audio/MinisPolySynth.cs†L9-L178】
 
 ## Scene Composition
-- **GameRoot (GameObject)**
-  - `MelodicDictationController` – owns gameplay flow. Inspector fields: `synth`, `playbackVelocity` (0.9), `noteDuration` (0.8s), `noteGap` (0.2s), `preRollSeconds` (1.25s), `noteCount` (6 in scene), `baseNote` (48/C3), `rangeSemitones` (12), `squaresParent`, `squarePrefab`, `replayButton`, `squareBaseColor` (cyan tint), `squareHighlightColor` (white), `squareClearedColor` (transparent), `hideClearedSquares`, `log`.【F:Assets/Scripts/Core/MelodicDictationController.cs†L11-L43】【F:Assets/Scenes/MelodicDictation.unity†L8334-L8358】
-  - `MinisPolySynth` – triangle waveform polysynth with `masterGain` 0.2, `maxVoices` 10, `attack`/`release` 8; requires the colocated `AudioSource` plus the scene adds `AudioChorusFilter` and `AudioReverbFilter` for colour.【F:Assets/Scripts/Audio/MinisPolySynth.cs†L1-L115】【F:Assets/Scenes/MelodicDictation.unity†L8338-L8347】【F:Assets/Scenes/MelodicDictation.unity†L8184-L8237】
-  - `MidiProbe` – assigns `synth` and `dictation` references for MIDI routing/logging.【F:Assets/Scripts/Audio/MIDIProbe.cs†L8-L28】【F:Assets/Scenes/MelodicDictation.unity†L8184-L8198】
-- **Canvas (Screen Space - Overlay)** hosts UI. Children include `SquaresParent`, `ReplayBtn`, and other HUD panels; paired with `CanvasScaler` and `GraphicRaycaster` for responsiveness.【F:Assets/Scenes/MelodicDictation.unity†L1905-L1993】
-- **SquaresParent (RectTransform)** – centered container with `HorizontalLayoutGroup` (spacing 12, child force expand). Disabled `Image` component keeps it invisible. Receives instantiated square images per note.【F:Assets/Scenes/MelodicDictation.unity†L12588-L12635】
-- **SquarePrefab (UI Image)** – 100×100 rect with `Image` + `CanvasRenderer`. Used exclusively for melodic step indicators.【F:Assets/Prefabs/Melodic Dictation/SquarePrefab.prefab†L1-L53】
-- **ReplayBtn (Button)** – anchored bottom-left, uses default button visuals; the controller registers `ReplayMelody` at runtime.【F:Assets/Scenes/MelodicDictation.unity†L12040-L12148】【F:Assets/Scripts/Core/MelodicDictationController.cs†L35-L44】
-- **EventSystem** – Input System UI module so the mouse cursor can interact with buttons.【F:Assets/Scenes/MelodicDictation.unity†L9360-L9404】
+- **GameRoot** (or equivalent)
+  - `MelodicDictationController`
+    - Audio: `synth`, `playbackVelocity`, `noteDuration`, `noteGap`.
+    - Timing: `preRollSeconds`.
+    - Melody: `noteCount`, `baseNote`, `rangeSemitones`, optional `melodyGen` (required for current seed/timer logic—see Gotchas).
+    - UI: `squaresParent`, `squarePrefab`, `replayButton`, `squareBaseColor`, `squareHighlightColor`, `squareClearedColor`, `hideClearedSquares`.
+    - Scoring/UI feedback: `scoreText`, `messageText`, `messageDuration`, `messageWinColor`, `messageWrongColor`.
+    - SFX: `sfxSource`, `sfxWin`, `sfxWrong`, `sfxGameOver`.
+    - Tuning: `pointsPerNote`, `pointsWrongNote`, `pointsReplay`, `pointsPerSecondInput`, `maxWrongPerRound`.
+    - Session: `endScreen`, `log`.
+  - `MinisPolySynth` + `AudioSource` (with optional filters) handle playback and live monitoring.【F:Assets/Scripts/Core/MelodicDictationController.cs†L16-L63】【F:Assets/Scripts/Audio/MinisPolySynth.cs†L7-L108】
+  - `MidiProbe` points at the synth and controller for routing/logging.【F:Assets/Scripts/Audio/MIDIProbe.cs†L8-L61】
+- **Canvas (Screen Space - Overlay)**
+  - `SquaresParent` (`RectTransform` + layout) receives instantiated `squarePrefab` images each round.
+  - `ReplayButton` wires to `OnReplayButtonPressed`.
+  - HUD elements hosting `scoreText` / `messageText` (TMP).
+  - A 2D `AudioSource` for SFX can live here or on GameRoot.
+- **EventSystem** (Input System UI) for button clicks.
 
-## Game Flow
-1. **Scene load / Awake** – controller unlocks and shows the cursor, wires the replay button click handler, and immediately triggers `StartRound`.【F:Assets/Scripts/Core/MelodicDictationController.cs†L35-L48】
-2. **StartRound** – randomizes a C-major melody within `baseNote`+`rangeSemitones`, spawns matching UI squares, then calls `PlayMelodyFromTop`.【F:Assets/Scripts/Core/MelodicDictationController.cs†L103-L137】
-3. **Pre-roll & playback** – coroutine waits `preRollSeconds`, then iterates the melody: highlight current square, call `synth.NoteOn`, hold for `noteDuration`, release with `NoteOff`, fade square back to `squareBaseColor`, and pause `noteGap` between steps. State switches to `Listening` once playback ends.【F:Assets/Scripts/Core/MelodicDictationController.cs†L137-L167】
-4. **Listening** – while `state == Listening`, incoming `NoteOn` events are evaluated against `melody[inputIndex]` using pitch-class comparison so octave equivalents count.【F:Assets/Scripts/Core/MelodicDictationController.cs†L59-L105】
-5. **Success** – correct notes hide or fade their squares, advance the index, and once all notes are cleared the controller waits 0.75s, destroys the old squares, and restarts at step 2 with a fresh melody.【F:Assets/Scripts/Core/MelodicDictationController.cs†L63-L112】【F:Assets/Scripts/Core/MelodicDictationController.cs†L167-L170】
-6. **Failure** – a wrong pitch resets the index, restores all square visuals, immediately replays the same melody, and keeps the learner on the current round.【F:Assets/Scripts/Core/MelodicDictationController.cs†L85-L105】【F:Assets/Scripts/Core/MelodicDictationController.cs†L117-L137】
+## Gameplay & Flow
+1. **Awake** – unlock cursor, wire replay button, initialise score/message UI.
+2. **Start** – store `runStartTime` and immediately `StartRound()`.
+3. **StartRound**
+   - Randomise `melodyGen.Seed` and sync `melodyGen.Length = noteCount` before generating; fallback code randomises within `baseNote`+`rangeSemitones` and snaps to C major if no generator is present.
+   - Reset counters, (re)build indicator squares, compute `roundTimeBudgetSec` from potential score versus `pointsPerSecondInput` drain, then `PlayMelodyFromTop()`.
+4. **Playback coroutine** – wait `preRollSeconds`, flash each square, call `synth.NoteOn/NoteOff`, restore idle colours, then set `state = Listening`.
+5. **Listening** – `MidiProbe`-driven `OnMidiNoteOn` compares pitch classes; correct entries hide or fade the square and when complete, award `pointsPerNote × melody.Count`, fire win SFX/message, and queue `WinThenNextRound()`.
+6. **Mistakes** – wrong input adds `pointsWrongNote`, increments `wrongGuessesThisRound`, shows a message/SFX, and either replays (if under `maxWrongPerRound`) or `GameOver()`.
+7. **Replay** – button or `R` hotkey deducts `pointsReplay` and restarts playback coroutine without resetting the countdown.
+8. **Timer drain** – while Listening, `Update()` decrements `roundTimeRemainingSec` and continuously subtracts score according to `pointsPerSecondInput`; reaching zero triggers `GameOver()`.
+9. **Game Over** – stop playback, optionally silence synth (helper commented), show failure message/SFX, push high score via `MainMenuController.SetDictationHighScore`, and open `endScreen` with aggregated stats.
 
-## Events & State Machine
-- States: `Idle`, `Playing`, `Listening`; `PlayMelodyFromTop` sets `Playing`, the coroutine switches to `Listening`, and completion returns to `Idle`. Tracking fields include `List<int> melody`, `List<Image> squares`, `int inputIndex`, and `Coroutine playingCo`.【F:Assets/Scripts/Core/MelodicDictationController.cs†L45-L117】
-- MIDI handling: `MidiProbe` listens to Minis `MidiDevice.onWillNoteOn`, logging and forwarding each note to `MelodicDictationController.OnMidiNoteOn`. `NoteOff` is forwarded for completeness but unused by the dictation logic.【F:Assets/Scripts/Audio/MIDIProbe.cs†L29-L71】【F:Assets/Scripts/Core/MelodicDictationController.cs†L105-L112】
-- Event timeline examples:
-  - **Start Round** – `StartRound` → `BuildMelody` → `BuildSquares` → `PlayMelodyFromTop` (resets visuals, starts coroutine).
-  - **Right Note** – `OnMidiNoteOn` (listening) → matches pitch class → clear/hide square → increment index → if finished, `WinThenNextRound` coroutine.
-  - **Wrong Note** – `OnMidiNoteOn` mismatch → reset `inputIndex` → `ResetSquaresVisual` → `ReplayMelody` (stops any playing coroutine, restarts playback).
-  - **Replay button or R key** – UI click or hotkey → `ReplayMelody` → `PlayMelodyFromTop`; state returns to `Playing` until the coroutine finishes.【F:Assets/Scripts/Core/MelodicDictationController.cs†L33-L44】【F:Assets/Scripts/Core/MelodicDictationController.cs†L117-L156】
-
-## Audio Path
-- Playback uses `MinisPolySynth.NoteOn/NoteOff` with inspector-tuned `playbackVelocity`, `noteDuration`, and `noteGap`; melodies are monophonic but the synth supports up to 10 simultaneous voices for future expansion.【F:Assets/Scripts/Core/MelodicDictationController.cs†L13-L40】【F:Assets/Scripts/Audio/MinisPolySynth.cs†L11-L111】【F:Assets/Scenes/MelodicDictation.unity†L8338-L8347】
-- `MinisPolySynth` generates audio in `OnAudioFilterRead` using the selected waveform (triangle by default) and envelope, then routes through the attached `AudioSource`, with optional chorus/reverb filters already on the GameRoot for additional texture.【F:Assets/Scripts/Audio/MinisPolySynth.cs†L83-L197】【F:Assets/Scenes/MelodicDictation.unity†L8184-L8237】
-- Hardware MIDI also triggers the same synth via `MidiProbe`, so learners hear their input even outside scripted playback.【F:Assets/Scripts/Audio/MIDIProbe.cs†L47-L71】
+## Scoring, Timer & Feedback Details
+- Score UI is driven solely by `UpdateScoreUI()` (`Score: {score}` text via `scoreText`).【F:Assets/Scripts/Core/MelodicDictationController.cs†L170-L208】
+- `ShowMessage()` toggles `messageText` for win/wrong popups with configurable colours/duration; coroutine prevents overlap.【F:Assets/Scripts/Core/MelodicDictationController.cs†L156-L190】
+- Audio cues map 1:1 to state transitions (`sfxWin`, `sfxWrong`, `sfxGameOver`). Replay presses intentionally have no dedicated clip.
+- Round timers scale with melody length: `roundTimeBudgetSec = (max(pointsPerNote,0) × melody.Count) / |pointsPerSecondInput|`. Setting a non-negative drain effectively grants infinite time (guard clamps to 0.001 for calculations).【F:Assets/Scripts/Core/MelodicDictationController.cs†L121-L148】【F:Assets/Scripts/Core/MelodicDictationController.cs†L198-L217】
 
 ## UI Behaviour
-- Square indicators are instantiated each round under `SquaresParent`, inheriting layout spacing for even distribution across the canvas. Each starts with `squareBaseColor`, flashes to `squareHighlightColor` during playback, then either hides (`hideClearedSquares`) or fades to `squareClearedColor` when the learner plays the correct pitch.【F:Assets/Scripts/Core/MelodicDictationController.cs†L118-L158】【F:Assets/Scenes/MelodicDictation.unity†L12588-L12635】
-- `ResetSquaresVisual` re-enables and recolors every square at round start or after mistakes, ensuring hidden elements return before a replay.【F:Assets/Scripts/Core/MelodicDictationController.cs†L144-L153】
-- The replay button’s `OnClick` is wired in `Awake`; during playback extra presses restart the coroutine from the top without waiting for completion. A keyboard `R` shortcut mirrors this for quick iteration.【F:Assets/Scripts/Core/MelodicDictationController.cs†L33-L44】【F:Assets/Scripts/Core/MelodicDictationController.cs†L170-L176】
-- Cursor lock is disabled so the player can operate UI elements with the mouse; keep this scene in mind when switching from FPS-focused modules.【F:Assets/Scripts/Core/MelodicDictationController.cs†L33-L38】
+- `BuildSquares()` instantiates one `Image` per melody note; `ResetSquaresVisual()` re-enables/colours them before playback, and `ClearSquares()` destroys children between rounds.【F:Assets/Scripts/Core/MelodicDictationController.cs†L148-L189】
+- Correct guesses either `SetActive(false)` (if `hideClearedSquares`) or recolour to `squareClearedColor`; replay resets them before the next listen cycle.【F:Assets/Scripts/Core/MelodicDictationController.cs†L74-L110】【F:Assets/Scripts/Core/MelodicDictationController.cs†L175-L189】
+- Cursor is intentionally unlocked for UI interaction (`Cursor.lockState = None`).【F:Assets/Scripts/Core/MelodicDictationController.cs†L64-L78】
 
-## How to Run / Wire
-- Drop a `MelodicDictationController` in the scene and assign `synth`, `squaresParent`, `squarePrefab`, and `replayButton` references in the Inspector.
-- Ensure the same GameObject hosts `MinisPolySynth` plus an `AudioSource` (with optional chorus/reverb filters) so the synth can emit audio.【F:Assets/Scripts/Audio/MinisPolySynth.cs†L5-L33】【F:Assets/Scenes/MelodicDictation.unity†L8184-L8237】
-- Add `MidiProbe`, linking its `synth` and `dictation` fields to the components above for MIDI routing and monitoring.【F:Assets/Scripts/Audio/MIDIProbe.cs†L8-L28】
-- Create a `Canvas` (Screen Space - Overlay) with `SquaresParent` (RectTransform + `HorizontalLayoutGroup`) and a `ReplayBtn` (`Button` + `Image` + `Text`).【F:Assets/Scenes/MelodicDictation.unity†L1905-L1993】【F:Assets/Scenes/MelodicDictation.unity†L12588-L12635】【F:Assets/Scenes/MelodicDictation.unity†L12040-L12148】
-- Reference the `SquarePrefab` asset (`Assets/Prefabs/Melodic Dictation/SquarePrefab.prefab`) for the indicator visuals.【F:Assets/Prefabs/Melodic Dictation/SquarePrefab.prefab†L1-L53】
-- Keep an `EventSystem` with the Input System UI module in the scene so buttons remain clickable.【F:Assets/Scenes/MelodicDictation.unity†L9360-L9404】
-- Make sure the Unity Input System package is active and the Minis MIDI package is installed so devices register at runtime.【F:Assets/Scripts/Audio/MIDIProbe.cs†L12-L43】【F:Assets/Scripts/Audio/MinisPolySynth.cs†L33-L60】
+## Wiring Checklist
+- [ ] Place `MelodicDictationController`, `MinisPolySynth`, `AudioSource`, and `MidiProbe` on the same root and assign their cross-references.
+- [ ] Provide a `MelodyGenerator` asset/component if you want modal/difficulty control; set its register/mode options for the desired curriculum.
+- [ ] Build a Canvas with `SquaresParent`, `ReplayButton`, TMP score/message labels, and a 2D `AudioSource` for `sfxSource`.
+- [ ] Assign colour fields, `squarePrefab`, and SFX clips in the inspector.
+- [ ] Keep an Input System `EventSystem` active so the button and TMP components work.
+- [ ] Ensure the Unity Input System + Minis MIDI package are installed so devices appear at runtime.
+
+## Features Newly Documented / Worth Highlighting
+- **MelodyGenerator integration** – The controller now *requires* an assigned `melodyGen` to avoid null refs (seed & length sync happen every round). `MelodyGenerator` exposes modal scale selection (`ScaleMode` enum), contour presets, register limits, and leap heuristics for curriculum-driven sequences rather than random C-major.【F:Assets/Scripts/Core/MelodicDictationController.cs†L121-L147】【F:Assets/Scripts/Core/MelodyGenerator.cs†L1-L112】
+- **Scoring system** – Configurable point rewards/penalties, replay tax, per-second drain, and wrong-note strike limit feeding an `EndScreenController`. None of these knobs existed in the previous documentation.【F:Assets/Scripts/Core/MelodicDictationController.cs†L43-L217】
+- **Feedback layer** – TMP message banner, win/wrong/game-over SFX hooks, and run statistics captured for the shared end screen.【F:Assets/Scripts/Core/MelodicDictationController.cs†L50-L210】
+
+## Gotchas
+- `melodyGen` is dereferenced unconditionally inside `StartRound()`; leave it assigned or add a null guard before using the fallback path.
+- Forgetting to wire `scoreText`, `messageText`, or `sfxSource` doesn’t break flow but silently removes feedback—double-check inspector warnings.
+- Timer drain and penalties only run while `state == Listening`; changing state elsewhere without resetting `roundTimeRemainingSec` can leave stale countdown values.
 
 ## Dependencies
-- **Internal** – `MelodicDictationController`, `MidiProbe`, `MinisPolySynth`, UI layout prefabs (`SquarePrefab`, Canvas hierarchy), EventSystem.
-- **External** – Minis (Keijiro) MIDI package and Unity Input System (for hardware device events), Unity UI system for layout/interaction.【F:Assets/Scripts/Audio/MIDIProbe.cs†L12-L71】【F:Assets/Scripts/Audio/MinisPolySynth.cs†L33-L76】
-
-## Gotchas / Known Issues
-- Leaving `synth`, `squaresParent`, or `squarePrefab` unassigned silently skips audio or UI because the controller null-checks and returns early; double-check Inspector wiring.【F:Assets/Scripts/Core/MelodicDictationController.cs†L117-L139】
-- While the melody replays, input is ignored (`state != Listening`), so live MIDI presses during playback will not count—use the replay button or wait for the listening phase.【F:Assets/Scripts/Core/MelodicDictationController.cs†L59-L72】【F:Assets/Scripts/Core/MelodicDictationController.cs†L137-L167】
-- MIDI comparison ignores octaves (pitch class only); this is intentional but means learners can answer with any octave of the target pitch.【F:Assets/Scripts/Core/MelodicDictationController.cs†L72-L88】
-- `hideClearedSquares` removes GameObjects during success; `ResetSquaresVisual` must be called before replaying to revive them. Avoid manual deactivation elsewhere or the controller may not restore them.【F:Assets/Scripts/Core/MelodicDictationController.cs†L63-L101】【F:Assets/Scripts/Core/MelodicDictationController.cs†L144-L153】
-
-## Extensibility / TODO
-- Parameterize scale selection (e.g., minor modes) instead of the hard-coded `ForceToCMajor` helper.【F:Assets/Scripts/Core/MelodicDictationController.cs†L154-L170】
-- Expose melody length ranges or difficulty presets beyond the single `noteCount` value.
-- Add metronome or count-in audio to complement the pre-roll timer.
-- Track streaks/score for UI feedback and persistence between rounds.
-- Allow seeding or saving generated melodies for debugging/regression testing.
-- Integrate the reusable on-screen piano UI so non-MIDI users can participate.
-- Support alternative playback styles (e.g., arpeggiation speed controls, swing feel).
-
-## Quick Setup Checklist
-- [ ] Add `MelodicDictationController`, `MinisPolySynth`, `AudioSource`, `MidiProbe` to a shared GameObject and wire their references.
-- [ ] Create/verify a `Canvas` with `SquaresParent` (HorizontalLayoutGroup) and drop in a `ReplayBtn` button.
-- [ ] Assign `SquarePrefab` and color fields on the controller for the desired look.
-- [ ] Keep an `EventSystem` with Input System UI module active.
-- [ ] Confirm Unity’s Input System and Minis MIDI packages are installed and a MIDI device is connected for testing.
-- [ ] Play the scene and press `R` or the Replay button to verify playback before practicing input.
+- **Internal** – `MelodicDictationController`, `MelodyGenerator`, `MidiProbe`, `MinisPolySynth`, `EndScreenController`, UI prefabs/labels.
+- **External** – Unity Input System + Minis MIDI for hardware support, TextMeshPro for HUD labels, Unity UI for layout.
