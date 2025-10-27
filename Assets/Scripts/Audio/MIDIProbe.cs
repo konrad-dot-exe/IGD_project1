@@ -6,8 +6,19 @@ namespace EarFPS
     public class MidiProbe : MonoBehaviour
     {
         [Header("Targets")]
-        [SerializeField] MinisPolySynth synth;                       // optional (for monitoring sound)
-        [SerializeField] MelodicDictationController dictation;       // <-- assign in Inspector
+        [SerializeField] MinisPolySynth synth;                 // optional (for monitoring sound)
+        [SerializeField] MelodicDictationController dictation; // <-- assign in Inspector
+
+        [Header("Velocity Handling")]
+        [Tooltip("If true, Note-On with velocity <= 0 will be treated as Note-Off (MIDI-legal).")]
+        [SerializeField] bool treatZeroVelocityNoteOnAsOff = true;
+
+        [Tooltip("Gamma curve applied to 0..1 velocity before sending to synth. 1 = linear, <1 brightens, >1 darkens.")]
+        [SerializeField] float velocityCurveGamma = 1.0f;
+
+        [Tooltip("Optional minimum velocity floor after curve. Set to 0 to disable.")]
+        [Range(0f, 1f)]
+        [SerializeField] float minVelocityFloor = 0f;
 
         void OnEnable()
         {
@@ -37,12 +48,8 @@ namespace EarFPS
             var midi = device as Minis.MidiDevice;
             if (midi == null) return;
 
-            Debug.Log($"[MIDI] Connected: {midi.displayName}");
-
             midi.onWillNoteOn  += OnNoteOn;
             midi.onWillNoteOff += OnNoteOff;
-            // midi.onWillPitchBend    += OnPitchBend;
-            // midi.onWillControlChange += OnCC;
         }
 
         void TryUnhook(InputDevice device)
@@ -52,34 +59,36 @@ namespace EarFPS
 
             midi.onWillNoteOn  -= OnNoteOn;
             midi.onWillNoteOff -= OnNoteOff;
-            // midi.onWillPitchBend    -= OnPitchBend;
-            // midi.onWillControlChange -= OnCC;
-
-            Debug.Log($"[MIDI] Disconnected: {midi.displayName}");
         }
 
         // ---- Callbacks from Minis ----
         void OnNoteOn(Minis.MidiNoteControl note, float velocity)
         {
-            Debug.Log($"[MIDI] NoteOn  {note.noteNumber}  vel={velocity:0.00}");
+            // Some keyboards send "NoteOn with velocity 0" to mean NoteOff.
+            if (treatZeroVelocityNoteOnAsOff && velocity <= 0f)
+            {
+                OnNoteOff(note);
+                return;
+            }
+
+            // Normalize, curve, and floor the velocity (0..1)
+            float v = Mathf.Clamp01(velocity);
+            if (velocityCurveGamma != 1f)
+                v = Mathf.Pow(v, velocityCurveGamma);
+            if (minVelocityFloor > 0f)
+                v = Mathf.Lerp(minVelocityFloor, 1f, v);
 
             // (optional) monitor on local synth
-            if (synth) synth.NoteOn(note.noteNumber, velocity);
+            if (synth) synth.NoteOn(note.noteNumber, v);
 
-            // forward to dictation controller
-            if (dictation) dictation.OnMidiNoteOn(note.noteNumber, velocity);
+            // forward to dictation controller (use the same processed velocity)
+            if (dictation) dictation.OnMidiNoteOn(note.noteNumber, v);
         }
 
         void OnNoteOff(Minis.MidiNoteControl note)
         {
-            Debug.Log($"[MIDI] NoteOff {note.noteNumber}");
-
             if (synth) synth.NoteOff(note.noteNumber);
             if (dictation) dictation.OnMidiNoteOff(note.noteNumber);
         }
-
-        // Optional extras if you want later:
-        // void OnPitchBend(float value) { }
-        // void OnCC(int cc, float value) { }
     }
 }

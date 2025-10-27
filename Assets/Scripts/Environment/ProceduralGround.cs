@@ -1,5 +1,8 @@
 using UnityEngine;
-using UnityEngine.Rendering; // for IndexFormat
+using UnityEngine.Rendering; // IndexFormat
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
 public class ProceduralGround : MonoBehaviour
@@ -11,12 +14,66 @@ public class ProceduralGround : MonoBehaviour
     [SerializeField] float height = 18f;
     [SerializeField] float flatRadius = 22f;
 
-    Mesh mesh;
+    Mesh _mesh;
+    MeshFilter _mf;
 
-    void OnEnable()  { Rebuild(); }
-    void OnValidate(){ if (isActiveAndEnabled) Rebuild(); }
+    void Awake()
+    {
+        _mf = GetComponent<MeshFilter>();
+    }
 
-    void Rebuild()
+    void OnEnable()
+    {
+        // Runtime path: build and assign to the *instance* mesh to avoid editor-time hazards.
+        BuildOrRebuildMesh();
+        if (_mf) _mf.mesh = _mesh; // use instance at runtime
+    }
+
+#if UNITY_EDITOR
+    void OnValidate()
+    {
+        // Editor path: schedule after validation to avoid "SendMessage during OnValidate" issues.
+        EditorApplication.delayCall += () =>
+        {
+            if (this == null) return;           // object could have been deleted
+            if (!gameObject) return;
+            if (!_mf) _mf = GetComponent<MeshFilter>();
+
+            BuildOrRebuildMesh();
+            if (_mf) _mf.sharedMesh = _mesh;    // assign sharedMesh in editor for scene persistence
+        };
+    }
+#endif
+
+    void OnDisable()
+    {
+        // If you want the mesh to live across disable/enable, remove this cleanup.
+        // Otherwise, dispose to keep things tidy (and prevent double frees).
+        DisposeMesh();
+    }
+
+    void OnDestroy()
+    {
+        DisposeMesh();
+    }
+
+    void DisposeMesh()
+    {
+        if (_mesh == null) return;
+
+#if UNITY_EDITOR
+        if (!Application.isPlaying)
+            DestroyImmediate(_mesh);
+        else
+            Destroy(_mesh);
+#else
+        Destroy(_mesh);
+#endif
+        _mesh = null;
+    }
+
+    // --- Builds/updates the generated mesh. Does NOT write to the MeshFilter. ---
+    void BuildOrRebuildMesh()
     {
         int vCount = (radialSegments + 1) * (angularSegments + 1);
         var verts = new Vector3[vCount];
@@ -58,24 +115,36 @@ public class ProceduralGround : MonoBehaviour
                 int i2 = i0 + (angularSegments + 1);
                 int i3 = i2 + 1;
 
-                // Correct winding for upward-facing surface
+                // Upward-facing winding
                 tris[tIdx++] = i0; tris[tIdx++] = i1; tris[tIdx++] = i2;
                 tris[tIdx++] = i1; tris[tIdx++] = i3; tris[tIdx++] = i2;
             }
         }
 
-        if (mesh == null) mesh = new Mesh();
-        else mesh.Clear();
+        if (_mesh == null)
+        {
+            _mesh = new Mesh
+            {
+#if UNITY_EDITOR
+                name = "ProceduralGround (generated)"
+#endif
+            };
+            // Prevent accidental asset save in editor
+#if UNITY_EDITOR
+            _mesh.hideFlags = HideFlags.DontSaveInBuild | HideFlags.DontSaveInEditor;
+#endif
+        }
+        else
+        {
+            _mesh.Clear();
+        }
 
-        mesh.indexFormat = IndexFormat.UInt32;
-        mesh.vertices = verts;
-        mesh.uv = uvs;
-        mesh.triangles = tris;
+        _mesh.indexFormat = IndexFormat.UInt32;
+        _mesh.vertices = verts;
+        _mesh.uv = uvs;
+        _mesh.triangles = tris;
 
-        // Unity 6: no angle overload; just recalc
-        mesh.RecalculateNormals();   // (optional flags overload exists: MeshUpdateFlags.Default)
-        mesh.RecalculateBounds();
-
-        GetComponent<MeshFilter>().sharedMesh = mesh;
+        _mesh.RecalculateNormals();
+        _mesh.RecalculateBounds();
     }
 }

@@ -350,15 +350,15 @@ namespace EarFPS
             SceneManager.LoadScene(scene.buildIndex);
         }
 
-        public void QuitToDashboard()
-        {
-            Time.timeScale = 1f;
-        #if UNITY_EDITOR
-            UnityEditor.EditorApplication.isPlaying = false;
-        #else
-            Application.Quit();
-        #endif
-        }
+        // public void QuitToDashboard()
+        // {
+        //     Time.timeScale = 1f;
+        // #if UNITY_EDITOR
+        //     UnityEditor.EditorApplication.isPlaying = false;
+        // #else
+        //     Application.Quit();
+        // #endif
+        // }
 
         IEnumerator WinFlowCo()
         {

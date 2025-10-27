@@ -32,7 +32,10 @@ namespace EarFPS
         [SerializeField] float noteDurationSec = 0.8f;
 
         [Header("Scale / Mode (root fixed to C)")]
-        [SerializeField] ScaleMode mode = ScaleMode.Ionian;     // <- choose in Inspector
+        [SerializeField] ScaleMode mode = ScaleMode.Ionian;   
+        [SerializeField] bool randomizeModeEachRound = false;
+        public bool RandomizeModeEachRound { get => randomizeModeEachRound; set => randomizeModeEachRound = value; }
+        public ScaleMode CurrentMode => mode;
 
         [Header("Pitch Space (register)")]
         [SerializeField] int registerMinMidi = 55; // G3
@@ -50,13 +53,30 @@ namespace EarFPS
         [Tooltip("Allowed start degrees within the key (1..7). Default: 1,3,5.")]
         [SerializeField] bool[] allowedStartDegrees = new bool[7] { true, false, true, false, true, false, false };
         [Tooltip("Allowed END degrees within the key (1..7). Default: 1 only.")]
-        [SerializeField] bool[] allowedEndDegrees   = new bool[7] { true, false, false, false, false, false, false };
+        [SerializeField] bool[] allowedEndDegrees = new bool[7] { true, false, false, false, false, false, false };
+        
+        [Header("Tendency Engine (Semitone Resolution)")]
+        [SerializeField] bool enableTendencyEngine = true;
+        [SerializeField, Range(0f,1f)] float tendencyResolveProbability = 0.80f; // first chance to resolve
+        [SerializeField] bool allowSmallDetours = true;    // allow at most M3 detour on the first step
+        [SerializeField] bool debugTendencies = false;     // optional logs
+
+
 
         // Public accessors
         public int Seed { get => seed; set => seed = value; }
         public int Length { get => length; set => length = Mathf.Clamp(value, 1, 64); }
         public bool[] AllowedStartDegrees => allowedStartDegrees;
-        public bool[] AllowedEndDegrees   => allowedEndDegrees;
+        public bool[] AllowedEndDegrees => allowedEndDegrees;
+        
+        // Semitone tendency tracking
+        struct TendencyObligation
+        {
+            public int targetDegree;     // 1..7 in current mode
+            public int remainingSteps;   // 2 -> probabilistic; 1 -> mandatory
+        }
+        readonly Queue<TendencyObligation> _pendingTendencies = new();      // reset per melody
+        List<(int upperDeg, int lowerDeg)> _semitonePairs = null;           // computed from mode
 
         // Internal state
         System.Random rng;
@@ -78,6 +98,16 @@ namespace EarFPS
         // ---- Public API ----
         public List<MelodyNote> Generate()
         {
+
+            // Pick a mode per round if enabled (deterministic from seed)
+            if (randomizeModeEachRound)
+            {
+                mode = PickRandomModeFromSeed(seed);
+                Debug.Log($"[MelodyGenerator] Randomized mode this round: {mode}");
+            }
+            
+            if (enableTendencyEngine) _pendingTendencies.Clear();
+
             // Resolve register
             int minM = Mathf.Min(registerMinMidi, registerMaxMidi);
             int maxM = Mathf.Max(registerMinMidi, registerMaxMidi);
@@ -107,6 +137,11 @@ namespace EarFPS
             {
                 int prev = notes[i - 1].midi;
                 var candidates = BuildCandidates(prev, i, length, minM, maxM, mustResolveNext, featuredLeapsUsed);
+
+                if (enableTendencyEngine && candidates.Count > 0)
+                {
+                    ApplyTendencyRules(prev, i, length, minM, maxM, candidates);
+                }
 
                 if (i == length - 1)
                 {
@@ -157,6 +192,25 @@ namespace EarFPS
 
                 notes.Add(new MelodyNote(chosen, noteDurationSec));
                 i++;
+
+                if (enableTendencyEngine && _semitonePairs != null && _semitonePairs.Count > 0)
+                {
+                    int lastMidi = notes[i - 1].midi;
+                    int lastDeg = DegreeOf(lastMidi);
+                    foreach (var pair in _semitonePairs)
+                    {
+                        if (pair.upperDeg == lastDeg)
+                        {
+                            _pendingTendencies.Enqueue(new TendencyObligation
+                            {
+                                targetDegree = pair.lowerDeg,
+                                remainingSteps = 2     // next step probabilistic, then mandatory
+                            });
+                            if (debugTendencies)
+                                Debug.Log($"[Tendency] Triggered {pair.upperDeg}→{pair.lowerDeg} at pos {i-1}");
+                        }
+                    }
+                }
             }
 
             // Final safety: enforce allowed end degree
@@ -170,6 +224,60 @@ namespace EarFPS
                 }
             }
 
+            if (enableTendencyEngine && _pendingTendencies.Count > 0)
+            {
+                var last = _pendingTendencies.Peek();
+                if (last.remainingSteps <= 1)
+                {
+                    int lastMidi = notes[^1].midi;
+                    int targetDeg = Mathf.Clamp(last.targetDegree, 1, 7);
+
+                    // choose nearest register instance of target degree
+                    int resolutionMidi = -1;
+                    int bestD = int.MaxValue;
+                    for (int m = minM; m <= maxM; m++)
+                    {
+                        if (!IsInScale(m)) continue;
+                        if (DegreeOf(m) != targetDeg) continue;
+                        int d = Mathf.Abs(m - lastMidi);
+                        if (d < bestD) { bestD = d; resolutionMidi = m; }
+                    }
+
+                    if (resolutionMidi >= 0)
+                    {
+                        // 1) append the semitone resolution the tendency engine wants
+                        notes.Add(new MelodyNote(resolutionMidi, noteDurationSec));
+
+                        // 2) if that resolution isn’t an allowed ending, append a final cadence to the nearest allowed end
+                        if (!IsAllowedEndDegree(resolutionMidi))
+                        {
+                            int cadence = NearestAllowedEndInRegister(minM, maxM, resolutionMidi);
+                            if (cadence >= 0 && cadence != resolutionMidi)
+                                notes.Add(new MelodyNote(cadence, noteDurationSec));
+                        }
+
+                        if (debugTendencies)
+                            Debug.Log($"[Tendency] Appended resolution to deg {targetDeg} "
+                                    + (IsAllowedEndDegree(resolutionMidi) ? " (allowed end)" : " + cadence to allowed end"));
+                    }
+                    _pendingTendencies.Clear();
+                }
+            }
+
+
+            if (notes.Count > 0)
+            {
+                int last = notes[^1].midi;
+                if (!IsAllowedEndDegree(last))
+                {
+                    int fallback = NearestAllowedEndInRegister(minM, maxM, last);
+                    if (fallback >= 0)
+                    {
+                        // Replace the final note to guarantee legality
+                        notes[^1] = new MelodyNote(fallback, noteDurationSec);
+                    }
+                }
+}
             return notes;
         }
 
@@ -424,6 +532,24 @@ namespace EarFPS
 
             pcMask = new bool[12];
             for (int i = 0; i < 7; i++) pcMask[degreeOrder[i]] = true;
+
+            // --- Semitone pairs for tendency engine ---
+            // Build pairs (upper → lower) for adjacent degrees a,b where diff == 1 semitone.
+            // Also include wrap 7→1 if (12 - degreeOrder[6]) == 1 (e.g., Ionian leading tone).
+            _semitonePairs = new List<(int, int)>();
+            for (int i = 0; i < 6; i++)
+            {
+                int diff = (degreeOrder[i + 1] - degreeOrder[i] + 12) % 12;
+                if (diff == 1) _semitonePairs.Add((i + 2, i + 1));   // e.g., 4→3 in Ionian, 2→1 in Phrygian
+            }
+            int wrapDiff = (12 - degreeOrder[6]) % 12;
+            if (wrapDiff == 1) _semitonePairs.Add((7, 1));           // e.g., 7→1 leading tone
+            if (debugTendencies)
+            {
+                var parts = new List<string>();
+                foreach (var p in _semitonePairs) parts.Add($"{p.upperDeg}->{p.lowerDeg}");
+                Debug.Log($"[Tendency] Semitone pairs: {string.Join(", ", parts)}");
+            }
         }
 
         static int Mod12(int x) { int m = x % 12; return m < 0 ? m + 12 : m; }
@@ -462,15 +588,41 @@ namespace EarFPS
 
         int NearestAllowedEndInRegister(int minM, int maxM, int center)
         {
-            int best = -1; int bestD = int.MaxValue;
+            int best = -1;
+            int bestDist = int.MaxValue;
+
             for (int m = minM; m <= maxM; m++)
             {
                 if (!IsInScale(m)) continue;
+
+                int deg = DegreeOf(m);
+                if (!IsEndDegreeAllowed(deg)) continue; // <-- enforce your allowed endings (e.g. 1,3,5)
+
                 int d = Mathf.Abs(m - center);
-                if (d < bestD) { bestD = d; best = m; }
+                if (d < bestDist) { bestDist = d; best = m; }
+            }
+
+            // Fallback: if user somehow disabled all endings, bias to tonic in register
+            if (best < 0)
+            {
+                var tonics = new List<int>();
+                CollectDegreeInRegister(1, minM, maxM, tonics);
+                if (tonics.Count > 0)
+                {
+                    // pick the tonic closest to 'center'
+                    int pick = tonics[0];
+                    int dist = Mathf.Abs(pick - center);
+                    for (int i = 1; i < tonics.Count; i++)
+                    {
+                        int d = Mathf.Abs(tonics[i] - center);
+                        if (d < dist) { dist = d; pick = tonics[i]; }
+                    }
+                    best = pick;
+                }
             }
             return best;
         }
+
 
         void CollectDegreeInRegister(int degree, int minM, int maxM, List<int> outList)
         {
@@ -519,10 +671,75 @@ namespace EarFPS
             if (!allowLeaps) return new[] { 1 };
             switch (difficulty)
             {
-                case MelodyDifficulty.Beginner:      return new[] { 1, 2 };
-                case MelodyDifficulty.Intermediate:  return new[] { 1, 2, 3, 4 };
-                default:                              return new[] { 1, 2, 3, 4, 5, 6, 7 };
+                case MelodyDifficulty.Beginner: return new[] { 1, 2 };
+                case MelodyDifficulty.Intermediate: return new[] { 1, 2, 3, 4 };
+                default: return new[] { 1, 2, 3, 4, 5, 6, 7 };
             }
+        }
+        
+        // Adjusts candidate list based on current tendency obligations.
+        // - If mandatory: only allow the resolution target degree (octave-accommodated).
+        // - If probabilistic: with probability p, force the resolution;
+        //   else allow only small detours (≤ M3) and decrement window.
+        void ApplyTendencyRules(int prevMidi, int pos, int len, int minM, int maxM, List<Candidate> candidates)
+        {
+            if (_pendingTendencies.Count == 0) return;
+
+            // Oldest obligation wins
+            var obligation = _pendingTendencies.Peek();
+            int targetDeg = Mathf.Clamp(obligation.targetDegree, 1, 7);
+
+            // Helper: keep only candidates whose degree matches targetDeg (with octave fit)
+            void FilterToTargetDegree()
+            {
+                for (int idx = candidates.Count - 1; idx >= 0; idx--)
+                {
+                    int d = DegreeOf(candidates[idx].midi);
+                    if (d != targetDeg)
+                    {
+                        // Try octave shift if pitch-class matches but outside register constraints
+                        // (We prefer to keep candidates list clean; backtracking will handle dead-ends.)
+                        candidates.RemoveAt(idx);
+                    }
+                }
+            }
+
+            // Mandatory step: force the resolution
+            if (obligation.remainingSteps <= 1)
+            {
+                FilterToTargetDegree();
+                if (debugTendencies)
+                    Debug.Log($"[Tendency] Mandatory resolution → degree {targetDeg} (pos {pos}/{len})");
+                _pendingTendencies.Dequeue();  // will resolve this step
+                return;
+            }
+
+            // First step (probabilistic)
+            bool resolveNow = UnityEngine.Random.value < tendencyResolveProbability;
+            if (resolveNow)
+            {
+                FilterToTargetDegree();
+                if (debugTendencies)
+                    Debug.Log($"[Tendency] Probabilistic resolution → degree {targetDeg} (pos {pos}/{len})");
+                _pendingTendencies.Dequeue();  // resolve now
+                return;
+            }
+
+            // Not resolving now → allow a small detour and tighten options
+            if (allowSmallDetours)
+            {
+                // remove leaps beyond M3 (≥ 4 diatonic steps) from prev
+                for (int idx = candidates.Count - 1; idx >= 0; idx--)
+                {
+                    int steps = Mathf.Abs(DiatonicDistance(prevMidi, candidates[idx].midi));
+                    if (steps >= 4) candidates.RemoveAt(idx);
+                }
+            }
+
+            // Decrement obligation window (still pending)
+            obligation.remainingSteps = Mathf.Max(1, obligation.remainingSteps - 1);
+            _pendingTendencies.Dequeue();
+            _pendingTendencies.Enqueue(obligation);
         }
 
         ContourType RandomContour()
@@ -531,6 +748,20 @@ namespace EarFPS
             var list = new List<ContourType>();
             foreach (var v in values) if (v != ContourType.Random) list.Add(v);
             return list[rng.Next(list.Count)];
+        }
+
+        ScaleMode PickRandomModeFromSeed(int roundSeed)
+        {
+            // Only the six diatonic modes we support (no Locrian)
+            var options = new[]
+            {
+                ScaleMode.Ionian, ScaleMode.Dorian, ScaleMode.Phrygian,
+                ScaleMode.Lydian, ScaleMode.Mixolydian, ScaleMode.Aeolian
+            };
+
+            // Use your existing Hash() to keep runs deterministic for a given Seed
+            int idx = Mathf.Abs(Hash(roundSeed, 1337)) % options.Length;
+            return options[idx];
         }
 
         static IEnumerable<int> Indices(int n) { for (int i = 0; i < n; i++) yield return i; }

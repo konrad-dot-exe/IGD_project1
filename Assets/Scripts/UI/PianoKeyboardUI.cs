@@ -135,4 +135,18 @@ public class PianoKeyboardUI : MonoBehaviour
         if (_keyByNote.TryGetValue(midiNote, out var key))
             key.Highlight(on);
     }
+
+    // Called externally when MIDI input is received
+    public void OnMidiNoteOnExternal(int midiNote, float velocity)
+    {
+        if (_keyByNote.TryGetValue(midiNote, out var key))
+            key.Highlight(true);
+    }
+
+    public void OnMidiNoteOffExternal(int midiNote)
+    {
+        if (_keyByNote.TryGetValue(midiNote, out var key))
+            key.Highlight(false);
+    }
+    
 }
