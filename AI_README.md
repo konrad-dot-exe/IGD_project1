@@ -3,7 +3,7 @@
 _Purpose_: Give an AI assistant a fast mental model of this project so its suggestions land in the right files.
 
 ## Project Overview
-- **Game name**: _TODO_
+- **Game name**: Sonoria
 - **Unity version**: 6.0
 - **Render pipeline**: URP
 - **Entry scene**: `Assets/_Project/Scenes/_Boot.unity` (loads first playable scene)
@@ -42,7 +42,4 @@ ProjectSettings/     # must be committed
 - `_Boot.unity` initializes singletons/services, then loads the first level via Addressables/SceneManager.
 - Dev scratch scenes live in `Scenes/Dev/`. Production scenes in `Scenes/Prod/`.
 
-## Notes for the AI
-- When asked to add a feature, propose the file path(s) and assembly to place the code.
-- Prefer composing behaviours with small components over large god classes.
-- Suggest tests when adding non-trivial logic.
+

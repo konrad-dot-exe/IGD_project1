@@ -2327,11 +2327,11 @@ MonoBehaviour:
   seed: 12345
   length: 5
   noteDurationSec: 0.8
-  mode: 0
-  randomizeModeEachRound: 0
+  mode: 4
+  randomizeModeEachRound: 1
   registerMinMidi: 55
-  registerMaxMidi: 72
-  difficulty: 0
+  registerMaxMidi: 74
+  difficulty: 1
   contour: 5
   allowLeaps: 1
   immediateLeapResolutionProbability: 0.8
