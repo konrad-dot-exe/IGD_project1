@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objects serializationModel="Studio.02.03.00">
+	<object class="ParameterPreset" id="{4e338c54-cb15-4c57-a992-5659ea973dbe}">
+		<property name="name">
+			<value>keySemis</value>
+		</property>
+		<relationship name="folder">
+			<destination>{1cafe93c-0422-40b2-8482-bfa682fbcdbe}</destination>
+		</relationship>
+		<relationship name="parameter">
+			<destination>{3d9d1d7f-e317-4dfa-9c5c-8599a94bc8eb}</destination>
+		</relationship>
+	</object>
+	<object class="GameParameter" id="{3d9d1d7f-e317-4dfa-9c5c-8599a94bc8eb}">
+		<property name="minimum">
+			<value>-12</value>
+		</property>
+		<property name="maximum">
+			<value>12</value>
+		</property>
+		<property name="initialValue">
+			<value>10.153846153846153</value>
+		</property>
+	</object>
+</objects>

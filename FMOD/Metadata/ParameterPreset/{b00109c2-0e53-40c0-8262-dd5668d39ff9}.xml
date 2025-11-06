@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objects serializationModel="Studio.02.03.00">
+	<object class="ParameterPreset" id="{b00109c2-0e53-40c0-8262-dd5668d39ff9}">
+		<property name="name">
+			<value>midi</value>
+		</property>
+		<relationship name="folder">
+			<destination>{1cafe93c-0422-40b2-8482-bfa682fbcdbe}</destination>
+		</relationship>
+		<relationship name="parameter">
+			<destination>{71d509e6-7107-4e0d-bc09-6d2c4fd6ffc8}</destination>
+		</relationship>
+	</object>
+	<object class="GameParameter" id="{71d509e6-7107-4e0d-bc09-6d2c4fd6ffc8}">
+		<property name="maximum">
+			<value>127</value>
+		</property>
+		<property name="isGlobal">
+			<value>true</value>
+		</property>
+		<property name="initialValue">
+			<value>0</value>
+		</property>
+		<property name="isExposedRecursively">
+			<value>false</value>
+		</property>
+	</object>
+</objects>

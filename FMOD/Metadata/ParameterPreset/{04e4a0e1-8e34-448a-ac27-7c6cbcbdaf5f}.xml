@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<objects serializationModel="Studio.02.02.00">
+<objects serializationModel="Studio.02.03.00">
 	<object class="ParameterPreset" id="{04e4a0e1-8e34-448a-ac27-7c6cbcbdaf5f}">
 		<property name="name">
 			<value>GlobalToggle</value>

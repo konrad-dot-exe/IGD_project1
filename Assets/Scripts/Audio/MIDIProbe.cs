@@ -8,6 +8,8 @@ namespace EarFPS
         [Header("Targets")]
         [SerializeField] MinisPolySynth synth;                 // optional (for monitoring sound)
         [SerializeField] MelodicDictationController dictation; // <-- assign in Inspector
+        [SerializeField] FmodNoteSynth fmod;         // optional: FMOD live monitor
+        [SerializeField] bool routeToFmod = true;    // toggle in Inspector
 
         [Header("Velocity Handling")]
         [Tooltip("If true, Note-On with velocity <= 0 will be treated as Note-Off (MIDI-legal).")]
@@ -79,7 +81,10 @@ namespace EarFPS
                 v = Mathf.Lerp(minVelocityFloor, 1f, v);
 
             // (optional) monitor on local synth
-            if (synth) synth.NoteOn(note.noteNumber, v);
+            //if (synth) synth.NoteOn(note.noteNumber, v);
+
+            // NEW: mirror to FMOD
+            if (routeToFmod && fmod) fmod.NoteOn(note.noteNumber, v);
 
             // forward to dictation controller (use the same processed velocity)
             if (dictation) dictation.OnMidiNoteOn(note.noteNumber, v);
@@ -87,7 +92,8 @@ namespace EarFPS
 
         void OnNoteOff(Minis.MidiNoteControl note)
         {
-            if (synth) synth.NoteOff(note.noteNumber);
+            //if (synth) synth.NoteOff(note.noteNumber);
+            if (routeToFmod && fmod) fmod.NoteOff(note.noteNumber);  
             if (dictation) dictation.OnMidiNoteOff(note.noteNumber);
         }
     }

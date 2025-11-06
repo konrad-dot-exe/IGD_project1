@@ -32,9 +32,11 @@ public class LightningFX : MonoBehaviour
 
     [Header("Audio (optional)")]
     public AudioSource audioSource;
-    public AudioClip sfxLightning;                   // short crack
+    //public AudioClip sfxLightning;                   // short crack
     public AudioClip sfxThunder;                     // rolling thunder
     public Vector2 thunderDelayRange = new(0.25f, 0.8f); // delay to taste
+
+    [SerializeField] FmodSfxPlayer fmodSfx;
 
     Coroutine flashRoutine;
 
@@ -66,7 +68,8 @@ public class LightningFX : MonoBehaviour
     }
     IEnumerator DoStrike(int pattern)
     {
-        if (sfxLightning && audioSource) audioSource.PlayOneShot(sfxLightning, 0.5f);
+        //if (sfxLightning && audioSource) audioSource.PlayOneShot(sfxLightning, 0.5f);
+        if (fmodSfx) fmodSfx.PlayLightning();
 
         // Aim light slightly from the sky
         transform.rotation = Quaternion.Euler(Random.Range(5, 20), Random.Range(20, 160), 0);
@@ -82,7 +85,8 @@ public class LightningFX : MonoBehaviour
         {
             float delay = Random.Range(thunderDelayRange.x, thunderDelayRange.y);
             yield return new WaitForSeconds(delay);
-            audioSource.PlayOneShot(sfxThunder, 1f);
+            //audioSource.PlayOneShot(sfxThunder, 1f);
+            if (fmodSfx) fmodSfx.PlayThunder();
         }
     }
 

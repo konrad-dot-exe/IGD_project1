@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<objects serializationModel="Studio.02.02.00">
+<objects serializationModel="Studio.02.03.00">
 	<object class="ParameterPreset" id="{4547013a-af99-4935-94d7-f4a16c760e93}">
 		<property name="name">
 			<value>AmbiZone</value>
@@ -18,11 +18,22 @@
 		<property name="initialValue">
 			<value>0</value>
 		</property>
-		<property name="seekSpeed">
-			<value>1.6999999284744263</value>
-		</property>
 		<property name="isExposedRecursively">
 			<value>false</value>
+		</property>
+		<relationship name="modulators">
+			<destination>{a84014c2-237a-4193-aa24-9465bb1b8f0d}</destination>
+		</relationship>
+	</object>
+	<object class="SeekModulator" id="{a84014c2-237a-4193-aa24-9465bb1b8f0d}">
+		<property name="nameOfPropertyBeingModulated">
+			<value>cursorPosition</value>
+		</property>
+		<property name="clockSource">
+			<value>1</value>
+		</property>
+		<property name="speedAscending">
+			<value>0.84999996423721313</value>
 		</property>
 	</object>
 </objects>

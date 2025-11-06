@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objects serializationModel="Studio.02.03.00">
+	<object class="EncodableAsset" id="{dbb5cdf9-2ebc-4f97-be53-bc76111c1c34}">
+		<property name="assetPath">
+			<value>SFX/Lightning/</value>
+		</property>
+		<relationship name="masterAssetFolder">
+			<destination>{f2ebb59c-0df8-4353-8218-ef129e20ef4b}</destination>
+		</relationship>
+	</object>
+</objects>

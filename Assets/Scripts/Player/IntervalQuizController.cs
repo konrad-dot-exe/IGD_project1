@@ -16,7 +16,7 @@ namespace EarFPS
         [SerializeField] float beepDur = 0.20f;
         [SerializeField] float gapDur = 0.20f;
         [SerializeField] Waveform waveform = Waveform.SineWithH2;
-        [SerializeField] float listenRepeatGap = 0.20f;
+        //[SerializeField] float listenRepeatGap = 0.20f;
         [SerializeField] float minVolume = 0.25f;
         [SerializeField] float maxListenDist = 150f;
         [SerializeField] ListenZoom listenZoom;

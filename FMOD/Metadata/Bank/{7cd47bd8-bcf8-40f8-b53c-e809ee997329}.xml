@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<objects serializationModel="Studio.02.02.00">
+<objects serializationModel="Studio.02.03.00">
 	<object class="Bank" id="{7cd47bd8-bcf8-40f8-b53c-e809ee997329}">
 		<property name="name">
 			<value>Master</value>

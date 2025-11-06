@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<objects serializationModel="Studio.02.02.00">
+<objects serializationModel="Studio.02.03.00">
 	<object class="Bank" id="{afcbb40d-75fb-4d64-9982-e408a7a0baf5}">
 		<property name="name">
 			<value>SFX</value>

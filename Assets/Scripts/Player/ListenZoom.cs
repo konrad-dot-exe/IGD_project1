@@ -34,7 +34,7 @@ namespace EarFPS
         // Targets for the instant set (adjust if you already have these as fields)
         [SerializeField] float normalFov = 60f;
         [SerializeField] float listenFov = 52f;
-        [SerializeField] float normalVig = 0f;
+        //[SerializeField] float normalVig = 0f;
         [SerializeField] float listenVig = 0.25f;
         [SerializeField] float normalAlpha = 0f;
         [SerializeField] float listenAlpha = 1f;

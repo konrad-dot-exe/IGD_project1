@@ -8,11 +8,17 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.InputSystem;
 using TMPro;
+using System.Reflection; 
 
 namespace EarFPS
 {
     public class MelodicDictationController : MonoBehaviour
     {
+        [SerializeField] FmodSfxPlayer fmodSfx;
+
+        [SerializeField] FmodNoteSynth fmodNoteSynth;
+        [SerializeField] bool useFmodForPlayback = false;
+        
         [Header("Audio / Synth")]
         [SerializeField] MinisPolySynth synth;
         [Range(0f, 1f)] public float playbackVelocity = 0.9f;
@@ -233,9 +239,13 @@ namespace EarFPS
                 {
                     int gain = Mathf.Max(0, pointsPerNote) * melody.Count;
                     score += gain;
-                    roundsCompleted += 1;
+                    roundsCompleted++;
+                    var applier = FindFirstObjectByType<Sonoria.Dictation.DifficultyProfileApplier>();
+                    applier?.NotifyRoundCompleted();
+                    
                     UpdateScoreUI();
-                    PlaySfx(sfxWin);
+                    //PlaySfx(sfxWin);
+                    if (fmodSfx) fmodSfx.PlayWin();
                     ShowMessage($"Great! +{gain}", messageWinColor);
 
                     state = State.Idle;
@@ -246,7 +256,8 @@ namespace EarFPS
             {
                 score += pointsWrongNote;
                 UpdateScoreUI();
-                PlaySfx(sfxWrong);
+                //PlaySfx(sfxWrong);
+                //if (fmodSfx) fmodSfx.PlayWrong();
                 ShowMessage($"Wrong note! {pointsWrongNote}", messageWrongColor);
                 if (lightning) lightning.Strike(1);   // 0=single, 1=double flicker
 
@@ -259,7 +270,7 @@ namespace EarFPS
 
                 inputIndex = 0;
                 RehideRevealed();
-                PlayMelodyFromTop(isReplay: false);
+                //PlayMelodyFromTop(isReplay: false);
                 //ReplayMelody();
             }
         }
@@ -273,6 +284,9 @@ namespace EarFPS
         // ---------------- Flow ----------------
         private void StartRound()
         {
+            if (pianoUI != null)
+                pianoUI.ShowImmediate();
+            
             // Seed & generator config
             if (melodyGen != null)
             {
@@ -327,6 +341,8 @@ namespace EarFPS
 
         private IEnumerator PlayMelodyCo(float delay)
         {
+            pianoUI.LockInput(true);   // fade + disable keyboard
+            
             if (delay > 0f) yield return new WaitForSeconds(delay);
 
             for (int i = 0; i < melody.Count; i++)
@@ -336,9 +352,17 @@ namespace EarFPS
                 // highlight the corresponding card during playback
                 HighlightPlaybackIndex(i, true);
 
-                if (synth) synth.NoteOn(note, playbackVelocity);
+                if (useFmodForPlayback && fmodNoteSynth)
+                    fmodNoteSynth.NoteOn(note, playbackVelocity);
+                else if (synth)
+                    synth.NoteOn(note, playbackVelocity);   // legacy playback synth; not used
+
                 yield return new WaitForSeconds(noteDuration);
-                if (synth) synth.NoteOff(note);
+
+                if (useFmodForPlayback && fmodNoteSynth)
+                    fmodNoteSynth.NoteOff(note);
+                else if (synth)
+                    synth.NoteOff(note);
 
                 HighlightPlaybackIndex(i, false);
 
@@ -346,6 +370,7 @@ namespace EarFPS
                     yield return new WaitForSeconds(noteGap);
             }
 
+            pianoUI.LockInput(false);  // restore
             state = State.Listening;
             if (log) Debug.Log("[Dictation] Now LISTENING");
         }
@@ -380,16 +405,59 @@ namespace EarFPS
         {
             melody.Clear();
 
+            int target = Mathf.Max(1, noteCount);
+
             if (melodyGen != null)
             {
-                var gen = melodyGen.Generate();
-                for (int i = 0; i < gen.Count; i++)
-                    melody.Add(gen[i].midi);
+                const int MaxAttempts = 6;   // try a few times before giving up
+                for (int attempt = 0; attempt < MaxAttempts; attempt++)
+                {
+                    // Generate
+                    var gen = melodyGen.Generate();
+
+                    // Copy up to target
+                    melody.Clear();
+                    if (gen != null)
+                    {
+                        for (int i = 0; i < gen.Count && i < target; i++)
+                            melody.Add(gen[i].midi);
+                    }
+
+                    // If exact length, we're done
+                    if (melody.Count == target) break;
+
+                    // If too many, trim and stop
+                    if (melody.Count > target)
+                    {
+                        melody.RemoveRange(target, melody.Count - target);
+                        break;
+                    }
+
+                    // Too short: reseed (if the generator exposes a Seed) and try again
+                    // This uses reflection so it’s safe even if Seed doesn’t exist.
+                    var seedProp = melodyGen.GetType().GetProperty(
+                        "Seed",
+                        BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance
+                    );
+                    if (seedProp != null && seedProp.CanWrite)
+                    {
+                        int newSeed = UnityEngine.Random.Range(int.MinValue, int.MaxValue);
+                        seedProp.SetValue(melodyGen, newSeed);
+                    }
+                    // otherwise rely on internal RNG differences and loop again
+                }
+
+                // Final guard: if still short, pad by repeating the last pitch (stable for testing)
+                while (melody.Count < target)
+                {
+                    int last = melody.Count > 0 ? melody[melody.Count - 1] : baseNote;
+                    melody.Add(last);
+                }
             }
             else
             {
                 // Fallback: random C-major in baseNote..baseNote+range
-                for (int i = 0; i < noteCount; i++)
+                for (int i = 0; i < target; i++)
                 {
                     int semis = Random.Range(0, rangeSemitones + 1);
                     int note = baseNote + semis;
@@ -416,11 +484,11 @@ namespace EarFPS
             messageText.gameObject.SetActive(false);
         }
 
-        private void PlaySfx(AudioClip clip)
-        {
-            if (!sfxSource || !clip) return;
-            sfxSource.PlayOneShot(clip);
-        }
+        // private void PlaySfx(AudioClip clip)
+        // {
+        //     if (!sfxSource || !clip) return;
+        //     sfxSource.PlayOneShot(clip);
+        // }
 
         // ---------------- Game Over ----------------
         private void GameOver()
@@ -430,7 +498,8 @@ namespace EarFPS
             if (playingCo != null) StopCoroutine(playingCo);
 
             ShowMessage("Game Over", messageWrongColor);
-            PlaySfx(sfxGameOver);
+            //PlaySfx(sfxGameOver);
+            if (fmodSfx) fmodSfx.PlayGameOver();
             MainMenuController.SetDictationHighScore(score);
 
             StartCoroutine(GameOverCinematic());
@@ -554,20 +623,23 @@ namespace EarFPS
 
         private IEnumerator WinSlideAndCleanup()
         {
-            PlaySfx(sfxCardsSweep);
+            //PlaySfx(sfxCardsSweep);
+            if (fmodSfx) fmodSfx.PlayCardsSweep();
 
             foreach (var c in activeCards)
                 if (c) StartCoroutine(c.SlideOffAndDestroy());
 
             activeCards.Clear();
-            yield return new WaitForSeconds(0.55f);
+            yield return new WaitForSeconds(0.25f);
         }
 
         IEnumerator GameOverCinematic()
         {
             goCinematicRunning = true;
 
-            // 1) (lock inputs / stop playback if needed)
+             // 1) (lock inputs / stop playback if needed)
+            if (pianoUI != null)
+                pianoUI.HideImmediate();   // ← fully invisible + no interaction
 
             if (lightning != null)
             {

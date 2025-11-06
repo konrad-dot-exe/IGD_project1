@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<objects serializationModel="Studio.02.02.00">
+<objects serializationModel="Studio.02.03.00">
 	<object class="MixerGroup" id="{c636c189-e7ae-4c6b-8d1c-e92c45fbf1cb}">
 		<property name="name">
 			<value>SFX</value>
@@ -17,8 +17,32 @@
 	<object class="MixerBusEffectChain" id="{fc5246ae-3389-4489-a00c-25901534ac30}">
 		<relationship name="effects">
 			<destination>{1a77aa6c-fb18-4c6e-af77-be9197f07a2e}</destination>
+			<destination>{bb5faaa2-0a87-4263-a196-99608e63a0b7}</destination>
+			<destination>{20833350-dc4c-49b4-905d-2d3f0d8e74a1}</destination>
 		</relationship>
 	</object>
 	<object class="MixerBusPanner" id="{a4f5b3d8-1b0c-4cc6-be09-3931e1d7a1e4}" />
 	<object class="MixerBusFader" id="{1a77aa6c-fb18-4c6e-af77-be9197f07a2e}" />
+	<object class="MixerSend" id="{bb5faaa2-0a87-4263-a196-99608e63a0b7}">
+		<property name="level">
+			<value>-10</value>
+		</property>
+		<property name="inputFormat">
+			<value>1</value>
+		</property>
+		<relationship name="mixerReturn">
+			<destination>{7b61e629-d1af-45b7-9ae3-60b94b6d1d62}</destination>
+		</relationship>
+	</object>
+	<object class="CompressorEffect" id="{20833350-dc4c-49b4-905d-2d3f0d8e74a1}">
+		<property name="threshold">
+			<value>-10</value>
+		</property>
+		<property name="attackTime">
+			<value>7.4000001</value>
+		</property>
+		<property name="releaseTime">
+			<value>120</value>
+		</property>
+	</object>
 </objects>
