@@ -24,6 +24,7 @@ namespace EarFPS
         [Range(0f, 1f)] public float playbackVelocity = 0.9f;
         public float noteDuration = 0.8f;
         public float noteGap = 0.2f;
+        [SerializeField] DronePlayer dronePlayer;
 
         [Header("Pre-roll")]
         public float preRollSeconds = 1.25f;
@@ -91,9 +92,22 @@ namespace EarFPS
         [Tooltip("Max wrong notes allowed per round before Game Over.")]
         public int maxWrongPerRound = 3;
 
+        [Header("Melody Generation")]
+        [Tooltip("Prevent the same melody from appearing in two consecutive rounds.")]
+        [SerializeField] bool preventDuplicateMelodies = true;
+
         // Scoring state
         private int score = 0;
         private int wrongGuessesThisRound = 0;
+
+        // Campaign mode state
+        [Header("Campaign Mode")]
+        [Tooltip("Whether the controller is in campaign mode (managed by CampaignService)")]
+        [SerializeField] bool isCampaignMode = false;
+        [Tooltip("Number of wins required to complete the current level (campaign mode only)")]
+        [SerializeField] int winsRequired = 0;
+        private bool levelJustCompleted = false;
+        private int newlyUnlockedNodeIndex = -1; // -1 if no node was unlocked
 
         // Run/session stats
         private float runStartTime = 0f;
@@ -101,6 +115,10 @@ namespace EarFPS
 
         [Header("Game Over / End Screen")]
         [SerializeField] EndScreenController endScreen; // optional
+
+        [Header("Unlock Announcement")]
+        [Tooltip("Unlock announcement controller (shown when a new module is unlocked)")]
+        [SerializeField] EarFPS.UnlockAnnouncementController unlockAnnouncement;
 
         [Header("Game Over Cinematic")]
         [SerializeField] List<CandleFlicker> candles = new();   // assign all Candle prefabs placed in scene
@@ -123,6 +141,8 @@ namespace EarFPS
 
 
         bool goCinematicRunning = false;
+        private bool _gameOverOccurred = false; // Track if game over happened (needed for environment reinitialization)
+        private bool _droneStartedForLevel = false; // Track if drone has been started for the current level
 
         [Header("Debug")]
         [SerializeField] bool log = false;
@@ -133,6 +153,7 @@ namespace EarFPS
         // Melody & UI
         private readonly List<int> melody = new();
         private readonly List<Image> squares = new(); // legacy (unused)
+        private List<int> previousMelody = null; // Store the last completed melody to prevent duplicates
 
         // Input/progress
         private int inputIndex = 0;
@@ -145,6 +166,33 @@ namespace EarFPS
         private float roundTimeBudgetSec = 0f;        // computed at StartRound
         private float roundTimeRemainingSec = 0f;     // counts down only while Listening
         private float drainAccumulator = 0f;          // accumulates fractional score drain
+
+        // Time limit timer (independent of point deduction)
+        [Tooltip("Time limit per round in seconds (set by DifficultyProfile).")]
+        public float roundTimeLimitSec = 60.0f;      // time limit from profile
+        private float roundTimeLimitRemainingSec = 0f; // remaining time limit
+        private bool timeLimitStarted = false;        // whether timer has started
+        private float lastLogTime = 0f;               // last time we logged (for 1-second intervals)
+
+        /// <summary>
+        /// Gets the remaining time limit in seconds.
+        /// </summary>
+        public float GetTimeLimitRemaining() => roundTimeLimitRemainingSec;
+
+        /// <summary>
+        /// Gets the total time limit in seconds.
+        /// </summary>
+        public float GetTimeLimit() => roundTimeLimitSec;
+
+        /// <summary>
+        /// Returns whether the time limit timer has started.
+        /// </summary>
+        public bool IsTimeLimitActive() => timeLimitStarted;
+
+        /// <summary>
+        /// Returns whether the controller is currently in Listening state (player can input).
+        /// </summary>
+        public bool IsListening() => state == State.Listening;
 
         // ---------------- Unity ----------------
         private void Awake()
@@ -160,7 +208,104 @@ namespace EarFPS
         private void Start()
         {
             runStartTime = Time.time;
-            StartRound();
+            // Reset previous melody at game start to allow any first melody
+            previousMelody = null;
+            
+            // FIRST: Check if campaign map exists - enable it if disabled, then check visibility
+            var mapView = FindFirstObjectByType<EarFPS.CampaignMapView>(FindObjectsInactive.Include);
+            if (mapView != null)
+            {
+                // Enable the map view if it was disabled in editor (workflow convenience)
+                if (!mapView.gameObject.activeSelf)
+                {
+                    mapView.gameObject.SetActive(true);
+                    Debug.Log("[Dictation] CampaignMapView was disabled in editor - enabled automatically");
+                }
+                
+                // Also enable level picker if it exists and is disabled
+                var levelPicker = FindFirstObjectByType<EarFPS.CampaignLevelPicker>(FindObjectsInactive.Include);
+                if (levelPicker != null && !levelPicker.gameObject.activeSelf)
+                {
+                    levelPicker.gameObject.SetActive(true);
+                    Debug.Log("[Dictation] CampaignLevelPicker was disabled in editor - enabled automatically");
+                }
+                
+                // Check if map is visible in hierarchy (should be true now if we just enabled it)
+                if (mapView.gameObject.activeInHierarchy)
+                {
+                    // Map is visible - don't start free-play, wait for level selection
+                    Debug.Log("[Dictation] Campaign map visible. Waiting for level selection.");
+                    return;
+                }
+            }
+            
+            // Check if campaign mode is enabled but no level is actually active
+            if (isCampaignMode)
+            {
+                // If campaign mode is enabled, verify that a level is actually active
+                var campaignService = FindFirstObjectByType<Sonoria.Dictation.CampaignService>();
+                if (campaignService == null || campaignService.CurrentLevel == null || winsRequired == 0)
+                {
+                    // Campaign mode was enabled but no level is active - check map again
+                    if (mapView == null)
+                        mapView = FindFirstObjectByType<EarFPS.CampaignMapView>(FindObjectsInactive.Include);
+                    
+                    if (mapView != null)
+                    {
+                        // Enable if disabled
+                        if (!mapView.gameObject.activeSelf)
+                            mapView.gameObject.SetActive(true);
+                        
+                        if (mapView.gameObject.activeInHierarchy)
+                        {
+                            // Map is visible - don't disable campaign mode or start free-play
+                            Debug.Log("[Dictation] Campaign mode enabled but no active level. Map visible - waiting for level selection.");
+                            return;
+                        }
+                    }
+                    
+                    // No map visible - disable campaign mode and start free-play
+                    Debug.LogWarning("[Dictation] Campaign mode enabled but no active level. Disabling campaign mode and starting free-play.");
+                    DisableCampaignMode();
+                    StartRoundInternal();
+                    return;
+                }
+                
+                // Campaign mode is active and level is set - wait for CampaignService to start the round
+                if (log) Debug.Log("[Dictation] Campaign mode active. Waiting for CampaignService to start level.");
+                return;
+            }
+            
+            // Free-play mode: start normally
+            StartRoundInternal();
+        }
+
+        /// <summary>
+        /// Sets the wins required for campaign mode (called by CampaignService).
+        /// </summary>
+        public void SetWinsRequiredForCampaign(int winsRequired)
+        {
+            this.winsRequired = winsRequired;
+            levelJustCompleted = false;
+            isCampaignMode = true;
+            
+            // Reset drone started flag when a new level is configured
+            _droneStartedForLevel = false;
+            
+            if (log) Debug.Log($"[Dictation] Campaign mode enabled: {winsRequired} wins required");
+        }
+
+        /// <summary>
+        /// Disables campaign mode (for free-play).
+        /// </summary>
+        public void DisableCampaignMode()
+        {
+            isCampaignMode = false;
+            winsRequired = 0;
+            levelJustCompleted = false;
+            
+            // Reset drone started flag when disabling campaign mode (for free-play)
+            _droneStartedForLevel = false;
         }
 
         private void OnDestroy()
@@ -174,8 +319,28 @@ namespace EarFPS
             if (Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame)
                 OnReplayButtonPressed();
 
-            // Timer drains only while Listening
-            if (state == State.Listening)
+            // Time limit timer (runs independently once started)
+            if (timeLimitStarted)
+            {
+                float dt = Time.deltaTime;
+                roundTimeLimitRemainingSec = Mathf.Max(0f, roundTimeLimitRemainingSec - dt);
+
+                // Log remaining time every second
+                if (Time.time - lastLogTime >= 1.0f)
+                {
+                    lastLogTime = Time.time;
+                }
+
+                // Check if time limit expired
+                if (roundTimeLimitRemainingSec <= 0f)
+                {
+                    GameOver();
+                    return; // Exit early to prevent point deduction
+                }
+            }
+
+            // Point deduction timer (only while Listening and time limit not expired)
+            if (state == State.Listening && roundTimeLimitRemainingSec > 0f)
             {
                 float drainRate = Mathf.Abs(pointsPerSecondInput);
                 if (drainRate < 0.001f) drainRate = 0.001f;
@@ -193,10 +358,7 @@ namespace EarFPS
                     UpdateScoreUI();
                 }
 
-                if (roundTimeRemainingSec <= 0f)
-                {
-                    GameOver();
-                }
+                // Note: roundTimeRemainingSec check removed - time limit is now the only expiration condition
             }
 
             if (goCinematicRunning && Input.GetKeyDown(goSkipKey))
@@ -240,8 +402,34 @@ namespace EarFPS
                     int gain = Mathf.Max(0, pointsPerNote) * melody.Count;
                     score += gain;
                     roundsCompleted++;
-                    var applier = FindFirstObjectByType<Sonoria.Dictation.DifficultyProfileApplier>();
-                    applier?.NotifyRoundCompleted();
+                    
+                    // Store the completed melody to prevent duplicates in the next round
+                    if (preventDuplicateMelodies)
+                    {
+                        previousMelody = new List<int>(melody);
+                        if (log) Debug.Log($"[Dictation] Stored previous melody: [{string.Join(", ", previousMelody)}]");
+                    }
+                    
+                    // Campaign mode: record win and check for level completion
+                    levelJustCompleted = false;
+                    newlyUnlockedNodeIndex = -1;
+                    if (isCampaignMode)
+                    {
+                        var campaignService = FindFirstObjectByType<Sonoria.Dictation.CampaignService>();
+                        if (campaignService != null)
+                        {
+                            // RecordLevelWin increments counter, checks if level is complete, and handles unlock logic
+                            var winResult = campaignService.RecordLevelWin();
+                            levelJustCompleted = winResult.levelComplete;
+                            newlyUnlockedNodeIndex = winResult.newlyUnlockedNodeIndex;
+                        }
+                    }
+                    else
+                    {
+                        // Free-play mode: use applier's auto-advance
+                        var applier = FindFirstObjectByType<Sonoria.Dictation.DifficultyProfileApplier>();
+                        applier?.NotifyRoundCompleted();
+                    }
                     
                     UpdateScoreUI();
                     //PlaySfx(sfxWin);
@@ -282,8 +470,38 @@ namespace EarFPS
         }
 
         // ---------------- Flow ----------------
-        private void StartRound()
+        /// <summary>
+        /// Starts a new round. Public method for external calls (e.g., CampaignService).
+        /// </summary>
+        public void StartRound()
         {
+            StartRoundInternal();
+        }
+
+        private void StartRoundInternal()
+        {
+            // Reinitialize environment if game over occurred (candles extinguished, drone stopped)
+            if (_gameOverOccurred)
+            {
+                ReinitializeEnvironment();
+                _gameOverOccurred = false; // Reset flag after reinitialization
+                _droneStartedForLevel = true; // Mark drone as started after reinitialization
+            }
+            else if (!_droneStartedForLevel)
+            {
+                // First round of level: start drone (drone should not start automatically when scene loads)
+                if (dronePlayer != null)
+                {
+                    dronePlayer.StartDrone();
+                    _droneStartedForLevel = true; // Mark drone as started
+                }
+            }
+            // If _droneStartedForLevel is true, drone is already playing - don't restart it
+
+            // Reset state
+            state = State.Idle;
+            inputIndex = 0;
+            
             if (pianoUI != null)
                 pianoUI.ShowImmediate();
             
@@ -298,12 +516,24 @@ namespace EarFPS
             wrongGuessesThisRound = 0;
             drainAccumulator = 0f;
 
+            // Reset time limit timer (will start when Listening state begins)
+            roundTimeLimitRemainingSec = roundTimeLimitSec;
+            timeLimitStarted = false;
+            lastLogTime = 0f;
+
             BuildMelody();
+            
+            // Safety check: ensure melody was generated
+            if (melody == null || melody.Count == 0)
+            {
+                Debug.LogError("[Dictation] Failed to generate melody in StartRound. Cannot start round.");
+                return;
+            }
 
             // Build cards for this melody
             StartCoroutine(BuildCards(melody.ToArray()));
 
-            // Compute round time budget from potential points
+            // Compute round time budget from potential points (for point deduction calculation only)
             float potential = Mathf.Max(0, pointsPerNote) * melody.Count;
             float drainRate = Mathf.Abs(pointsPerSecondInput);
             if (drainRate < 0.001f) drainRate = 0.001f;
@@ -311,6 +541,7 @@ namespace EarFPS
             roundTimeRemainingSec = roundTimeBudgetSec;
 
             if (log) Debug.Log($"[Dictation] Round time budget = {roundTimeBudgetSec:F1}s (mel={melody.Count}, potential={potential}, drain/s={drainRate})");
+            if (log) Debug.Log($"[Dictation] Time limit = {roundTimeLimitSec:F1}s");
 
             // First play uses full pre-roll
             PlayMelodyFromTop(isReplay: false);
@@ -318,6 +549,18 @@ namespace EarFPS
 
         private void OnReplayButtonPressed()
         {
+            // Can't replay if no melody has been generated yet
+            if (melody == null || melody.Count == 0)
+            {
+                if (log) Debug.LogWarning("[Dictation] Cannot replay: No melody generated yet. Starting a new round instead.");
+                // If no melody exists, try to start a round instead
+                if (state == State.Idle)
+                {
+                    StartRoundInternal();
+                }
+                return;
+            }
+            
             score += pointsReplay;
             UpdateScoreUI();
             ReplayMelody();
@@ -325,6 +568,13 @@ namespace EarFPS
 
         private void ReplayMelody()
         {
+            // Safety check: ensure melody exists
+            if (melody == null || melody.Count == 0)
+            {
+                if (log) Debug.LogWarning("[Dictation] Cannot replay: No melody to replay.");
+                return;
+            }
+            
             if (playingCo != null) StopCoroutine(playingCo);
             // Replays use shorter pre-roll
             PlayMelodyFromTop(isReplay: true);
@@ -372,6 +622,16 @@ namespace EarFPS
 
             pianoUI.LockInput(false);  // restore
             state = State.Listening;
+            
+            // Start time limit timer when Listening state begins (only on first entry)
+            if (!timeLimitStarted)
+            {
+                timeLimitStarted = true;
+                roundTimeLimitRemainingSec = roundTimeLimitSec;
+                lastLogTime = Time.time;
+                if (log) Debug.Log($"[Dictation] Time limit started: {roundTimeLimitSec:F1}s");
+            }
+            
             if (log) Debug.Log("[Dictation] Now LISTENING");
         }
 
@@ -396,11 +656,86 @@ namespace EarFPS
             if (postSweepDelay > 0f)
                 yield return new WaitForSeconds(postSweepDelay);
 
+            // Campaign mode: if level is complete, check for unlock and show appropriate screens
+            if (isCampaignMode && levelJustCompleted)
+            {
+                if (log) Debug.Log("[Dictation] Level complete.");
+                
+                // Check if a new node was unlocked
+                if (newlyUnlockedNodeIndex >= 0 && unlockAnnouncement != null)
+                {
+                    // Get the mode name and ScaleMode enum for the newly unlocked node
+                    var campaignService = FindFirstObjectByType<Sonoria.Dictation.CampaignService>();
+                    if (campaignService != null)
+                    {
+                        string modeName = campaignService.GetNodeModeName(newlyUnlockedNodeIndex);
+                        EarFPS.ScaleMode mode = campaignService.GetNodeMode(newlyUnlockedNodeIndex);
+                        
+                        if (!string.IsNullOrEmpty(modeName))
+                        {
+                            if (log) Debug.Log($"[Dictation] New node unlocked: {modeName}. Showing unlock announcement.");
+                            
+                            // Show unlock announcement with keyboard display, then show end screen when Continue is clicked
+                            unlockAnnouncement.ShowUnlock(modeName, mode, () =>
+                            {
+                                // After unlock announcement is dismissed, show end screen
+                                if (endScreen != null)
+                                {
+                                    endScreen.ShowDictation(score, roundsCompleted, Time.time - runStartTime, "Level Complete");
+                                }
+                                // Reset flags
+                                levelJustCompleted = false;
+                                newlyUnlockedNodeIndex = -1;
+                            });
+                            
+                            // Don't continue - unlock announcement callback will handle showing end screen
+                            yield break;
+                        }
+                    }
+                }
+                
+                // No unlock or unlock announcement not available - show end screen directly
+                if (log) Debug.Log("[Dictation] Showing endscreen.");
+                levelJustCompleted = false; // Reset flag
+                newlyUnlockedNodeIndex = -1;
+                
+                // Show endscreen with "Level Complete" title
+                if (endScreen != null)
+                {
+                    endScreen.ShowDictation(score, roundsCompleted, Time.time - runStartTime, "Level Complete");
+                }
+                yield break; // Don't start next round
+            }
+
             // Next round (first play again uses full pre-roll)
-            StartRound();
+            StartRoundInternal();
         }
 
         // ---------------- Melody ----------------
+        
+        /// <summary>
+        /// Compares two melodies for exact sequence equality (same length, same MIDI notes in same order).
+        /// </summary>
+        private bool MelodiesAreEqual(List<int> a, List<int> b)
+        {
+            // Both null or both empty
+            if ((a == null || a.Count == 0) && (b == null || b.Count == 0))
+                return true;
+            
+            // One is null/empty and the other isn't
+            if (a == null || b == null || a.Count != b.Count)
+                return false;
+            
+            // Compare each MIDI note in sequence
+            for (int i = 0; i < a.Count; i++)
+            {
+                if (a[i] != b[i])
+                    return false;
+            }
+            
+            return true;
+        }
+        
         private void BuildMelody()
         {
             melody.Clear();
@@ -423,26 +758,68 @@ namespace EarFPS
                             melody.Add(gen[i].midi);
                     }
 
-                    // If exact length, we're done
-                    if (melody.Count == target) break;
+                    // If exact length, check for duplicate
+                    if (melody.Count == target)
+                    {
+                        // Check if this melody matches the previous one (if duplicate prevention is enabled)
+                        if (preventDuplicateMelodies && previousMelody != null && MelodiesAreEqual(melody, previousMelody))
+                        {
+                            Debug.Log($"[Dictation] Duplicate melody detected, regenerating... (attempt {attempt + 1}/{MaxAttempts})");
+                            
+                            // Reseed and continue loop to regenerate
+                            var seedProp = melodyGen.GetType().GetProperty(
+                                "Seed",
+                                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance
+                            );
+                            if (seedProp != null && seedProp.CanWrite)
+                            {
+                                int newSeed = UnityEngine.Random.Range(int.MinValue, int.MaxValue);
+                                seedProp.SetValue(melodyGen, newSeed);
+                            }
+                            continue; // Try again with new seed
+                        }
+                        
+                        // Not a duplicate (or duplicate prevention disabled), we're done
+                        break;
+                    }
 
-                    // If too many, trim and stop
+                    // If too many, trim and check for duplicate
                     if (melody.Count > target)
                     {
                         melody.RemoveRange(target, melody.Count - target);
+                        
+                        // Check for duplicate after trimming
+                        if (preventDuplicateMelodies && previousMelody != null && MelodiesAreEqual(melody, previousMelody))
+                        {
+                            if (log) Debug.Log($"[Dictation] Duplicate melody detected after trim, regenerating... (attempt {attempt + 1}/{MaxAttempts})");
+                            
+                            // Reseed and continue loop to regenerate
+                            var seedProp = melodyGen.GetType().GetProperty(
+                                "Seed",
+                                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance
+                            );
+                            if (seedProp != null && seedProp.CanWrite)
+                            {
+                                int newSeed = UnityEngine.Random.Range(int.MinValue, int.MaxValue);
+                                seedProp.SetValue(melodyGen, newSeed);
+                            }
+                            continue; // Try again with new seed
+                        }
+                        
+                        // Not a duplicate, we're done
                         break;
                     }
 
                     // Too short: reseed (if the generator exposes a Seed) and try again
-                    // This uses reflection so it’s safe even if Seed doesn’t exist.
-                    var seedProp = melodyGen.GetType().GetProperty(
+                    // This uses reflection so it's safe even if Seed doesn't exist.
+                    var seedPropShort = melodyGen.GetType().GetProperty(
                         "Seed",
                         BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance
                     );
-                    if (seedProp != null && seedProp.CanWrite)
+                    if (seedPropShort != null && seedPropShort.CanWrite)
                     {
                         int newSeed = UnityEngine.Random.Range(int.MinValue, int.MaxValue);
-                        seedProp.SetValue(melodyGen, newSeed);
+                        seedPropShort.SetValue(melodyGen, newSeed);
                     }
                     // otherwise rely on internal RNG differences and loop again
                 }
@@ -453,16 +830,77 @@ namespace EarFPS
                     int last = melody.Count > 0 ? melody[melody.Count - 1] : baseNote;
                     melody.Add(last);
                 }
+                
+                // Check for duplicate after padding (if duplicate prevention is enabled)
+                if (preventDuplicateMelodies && previousMelody != null && MelodiesAreEqual(melody, previousMelody))
+                {
+                    if (log) Debug.Log($"[Dictation] Duplicate melody detected after padding, regenerating...");
+                    
+                    // Reseed one more time and regenerate
+                    var seedProp = melodyGen.GetType().GetProperty(
+                        "Seed",
+                        BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance
+                    );
+                    if (seedProp != null && seedProp.CanWrite)
+                    {
+                        int newSeed = UnityEngine.Random.Range(int.MinValue, int.MaxValue);
+                        seedProp.SetValue(melodyGen, newSeed);
+                        
+                        // Regenerate once more (this is a safety attempt beyond MaxAttempts)
+                        var gen = melodyGen.Generate();
+                        melody.Clear();
+                        if (gen != null)
+                        {
+                            for (int i = 0; i < gen.Count && i < target; i++)
+                                melody.Add(gen[i].midi);
+                        }
+                        
+                        // Pad again if needed
+                        while (melody.Count < target)
+                        {
+                            int last = melody.Count > 0 ? melody[melody.Count - 1] : baseNote;
+                            melody.Add(last);
+                        }
+                        
+                        // If still duplicate after regeneration, accept it (avoid infinite loop)
+                        if (MelodiesAreEqual(melody, previousMelody))
+                        {
+                            if (log) Debug.LogWarning($"[Dictation] Unable to generate non-duplicate melody after additional attempt, accepting duplicate.");
+                        }
+                    }
+                }
             }
             else
             {
                 // Fallback: random C-major in baseNote..baseNote+range
-                for (int i = 0; i < target; i++)
+                const int FallbackMaxAttempts = 10;
+                for (int attempt = 0; attempt < FallbackMaxAttempts; attempt++)
                 {
-                    int semis = Random.Range(0, rangeSemitones + 1);
-                    int note = baseNote + semis;
-                    note = ForceToCMajor(note);
-                    melody.Add(note);
+                    melody.Clear();
+                    for (int i = 0; i < target; i++)
+                    {
+                        int semis = Random.Range(0, rangeSemitones + 1);
+                        int note = baseNote + semis;
+                        note = ForceToCMajor(note);
+                        melody.Add(note);
+                    }
+                    
+                    // Check for duplicate in fallback path
+                    if (preventDuplicateMelodies && previousMelody != null && MelodiesAreEqual(melody, previousMelody))
+                    {
+                        if (log && attempt < FallbackMaxAttempts - 1)
+                            Debug.Log($"[Dictation] Duplicate melody in fallback generation, regenerating... (attempt {attempt + 1}/{FallbackMaxAttempts})");
+                        continue; // Try again
+                    }
+                    
+                    // Not a duplicate (or duplicate prevention disabled), we're done
+                    break;
+                }
+                
+                // If all attempts were duplicates, accept the last one (avoid infinite loop)
+                if (preventDuplicateMelodies && previousMelody != null && MelodiesAreEqual(melody, previousMelody))
+                {
+                    if (log) Debug.LogWarning($"[Dictation] Unable to generate non-duplicate melody in fallback path after {FallbackMaxAttempts} attempts, accepting duplicate.");
                 }
             }
         }
@@ -496,6 +934,11 @@ namespace EarFPS
             if (log) Debug.Log("[Dictation] GAME OVER");
             state = State.Idle;
             if (playingCo != null) StopCoroutine(playingCo);
+
+            if (dronePlayer != null) dronePlayer.Stop();
+
+            // Mark that game over occurred (needed for environment reinitialization on retry)
+            _gameOverOccurred = true;
 
             ShowMessage("Game Over", messageWrongColor);
             //PlaySfx(sfxGameOver);
@@ -702,6 +1145,32 @@ namespace EarFPS
                 endScreen.ShowDictation(score, roundsCompleted, Time.time - runStartTime);
         }
 
+        // ---------------- Environment Reinitialization ----------------
+        /// <summary>
+        /// Reinitializes the environment after a game over.
+        /// Reignites all candles and restarts the drone sound.
+        /// </summary>
+        private void ReinitializeEnvironment()
+        {
+            if (log) Debug.Log("[Dictation] Reinitializing environment after game over...");
+
+            // Reignite all candles with fade-in transition
+            foreach (var candle in candles)
+            {
+                if (candle != null)
+                {
+                    candle.Ignite(); // Uses default fade-in duration
+                }
+            }
+
+            // Restart drone player
+            if (dronePlayer != null)
+            {
+                dronePlayer.StartDrone();
+            }
+
+            if (log) Debug.Log("[Dictation] Environment reinitialized.");
+        }
 
         // ---------------- Legacy Squares (unused) ----------------
         // private void ResetSquaresVisual()

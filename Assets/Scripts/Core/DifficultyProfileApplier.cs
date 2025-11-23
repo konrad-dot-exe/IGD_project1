@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
 using TMPro;
+using EarFPS;
 
 
 namespace Sonoria.Dictation {
@@ -16,6 +17,7 @@ namespace Sonoria.Dictation {
 
         [Header("Scene Refs")] public MonoBehaviour melodyGenerator;  // assign MelodyGenerator
         public MonoBehaviour dictationController;                     // assign MelodicDictationController
+        public PianoKeyboardUI pianoKeyboardUI;                       // assign PianoKeyboardUI (optional)
 
         [Header("Hotkeys")] public KeyCode applyAndStartKey = KeyCode.Space;
         public KeyCode replayKey = KeyCode.R;
@@ -121,10 +123,32 @@ namespace Sonoria.Dictation {
             return presets[currentIndex];
         }
 
+        /// <summary>
+        /// Applies a specific DifficultyProfile directly (used by CampaignService).
+        /// </summary>
+        /// <param name="profile">The difficulty profile to apply</param>
+        /// <param name="modeOverride">Optional scale mode override. If provided (and not null), this mode will be used instead of the profile's allowedModes.</param>
+        public void ApplyProfile(DifficultyProfile profile, EarFPS.ScaleMode? modeOverride = null)
+        {
+            if (profile == null || gen == null || ctrl == null) return;
+            ApplyProfileInternal(profile, modeOverride);
+        }
+
         [ContextMenu("Apply Now")]
         public void ApplyNow()
         {
             var p = SafeCurrent(); if (p == null || gen == null || ctrl == null) return;
+            ApplyProfileInternal(p, null); // No override when using presets
+        }
+
+        /// <summary>
+        /// Internal method that applies a profile to generator and controller.
+        /// </summary>
+        /// <param name="p">The difficulty profile to apply</param>
+        /// <param name="modeOverride">Optional scale mode override. If provided, this mode will be used instead of the profile's allowedModes.</param>
+        void ApplyProfileInternal(DifficultyProfile p, EarFPS.ScaleMode? modeOverride = null)
+        {
+            if (p == null || gen == null || ctrl == null) return;
 
             // ---- Controller fields
             Set(ctrl, "preRollSeconds", p.preRollSeconds);
@@ -136,6 +160,7 @@ namespace Sonoria.Dictation {
             Set(ctrl, "pointsReplay", p.pointsReplay);
             Set(ctrl, "pointsPerSecondInput", p.pointsPerSecondInput);
             Set(ctrl, "maxWrongPerRound", p.maxWrongPerRound);
+            Set(ctrl, "roundTimeLimitSec", p.timeLimitPerRound);
 
             // ---- Generator fields
             Set(gen, "Length", p.melodyLength);
@@ -146,16 +171,31 @@ namespace Sonoria.Dictation {
             Set(gen, "registerMaxMidi", p.registerMaxMidi);
             Set(gen, "difficulty", p.difficulty);
             Set(gen, "contour", p.contour);
-            Set(gen, "allowLeaps", p.allowLeaps);
             Set(gen, "enableTendencyEngine", p.enableTendencies);
             Set(gen, "tendencyResolveProbability", p.tendencyResolveProbability);
             Set(gen, "allowSmallDetours", p.allowSmallDetours);
 
             // Modes
-            if (!p.randomizeModeEachRound && p.allowedModes != null && p.allowedModes.Length > 0)
+            EarFPS.ScaleMode modeToUse = EarFPS.ScaleMode.Ionian; // fallback
+            bool shouldSetMode = false;
+
+            if (modeOverride.HasValue)
             {
-                if (miGenSetMode != null) miGenSetMode.Invoke(gen, new object[] { p.allowedModes[0] });
-                else Set(gen, "mode", p.allowedModes[0]);
+                // Use the override mode if provided
+                modeToUse = modeOverride.Value;
+                shouldSetMode = true;
+            }
+            else if (!p.randomizeModeEachRound && p.allowedModes != null && p.allowedModes.Length > 0)
+            {
+                // Use the profile's first allowed mode
+                modeToUse = p.allowedModes[0];
+                shouldSetMode = true;
+            }
+
+            if (shouldSetMode)
+            {
+                if (miGenSetMode != null) miGenSetMode.Invoke(gen, new object[] { modeToUse });
+                else Set(gen, "mode", modeToUse);
             }
 
             // Degree masks (requires helpers on generator; no-op if missing)
@@ -163,9 +203,57 @@ namespace Sonoria.Dictation {
             Call(gen, "SetAllowedStartDegrees", p.allowedStartDegrees);
             Call(gen, "SetAllowedEndDegrees", p.allowedEndDegrees);
 
-            // Movement override
-            var steps = MovementToSteps(p.movement);
-            Call(gen, "SetAllowedStepSizes", steps);
+            // Movement Policy
+            if (gen != null && genType != null)
+            {
+                // Set movement policy
+                var setMovementPolicyMethod = genType.GetMethod("SetMovementPolicy", 
+                    BindingFlags.Public | BindingFlags.Instance);
+                if (setMovementPolicyMethod != null)
+                {
+                    setMovementPolicyMethod.Invoke(gen, new object[] { p.movementPolicy });
+                }
+                else
+                {
+                    // Fallback: use reflection to set field directly
+                    Set(gen, "movementPolicy", p.movementPolicy);
+                }
+
+                // Set max leap steps
+                var setMaxLeapStepsMethod = genType.GetMethod("SetMaxLeapSteps", 
+                    BindingFlags.Public | BindingFlags.Instance);
+                if (setMaxLeapStepsMethod != null)
+                {
+                    setMaxLeapStepsMethod.Invoke(gen, new object[] { p.maxLeapSteps });
+                }
+                else
+                {
+                    // Fallback: use reflection to set field directly
+                    Set(gen, "maxLeapSteps", p.maxLeapSteps);
+                }
+            }
+
+            // Update keyboard opacity for featured notes
+            if (pianoKeyboardUI != null)
+            {
+                // Get current mode from generator (handles randomized modes)
+                EarFPS.ScaleMode currentMode = modeToUse; // Use the mode we just set
+                if (gen != null)
+                {
+                    var modeProp = genType?.GetProperty("CurrentMode", BindingFlags.Public | BindingFlags.Instance);
+                    if (modeProp != null)
+                    {
+                        var modeValue = modeProp.GetValue(gen);
+                        // Convert via int to handle assembly reference differences between reflection and direct types
+                        int modeIntValue = (int)modeValue;
+                        currentMode = (EarFPS.ScaleMode)modeIntValue;
+                    }
+                }
+
+                // Convert to int to avoid assembly reference differences, use int overload
+                int finalModeInt = (int)currentMode;
+                pianoKeyboardUI.SetFeaturedNotes(finalModeInt, p.allowedDegrees, p.registerMinMidi, p.registerMaxMidi);
+            }
 
             // Update the Level text
             // if (levelLabel != null)
@@ -179,16 +267,6 @@ namespace Sonoria.Dictation {
             RoundLogger.LogSnapshot(SafeCurrent(), gen, ctrl);
         }
 
-        List<int> MovementToSteps(MovementSet set)
-        {
-            switch (set)
-            {
-                case MovementSet.Stepwise: return new List<int> { 1 };
-                case MovementSet.StepwisePlusThirds: return new List<int> { 1, 2 };
-                case MovementSet.DiatonicUpToFifths: return new List<int> { 1, 2, 3, 4, 5 };
-                default: return new List<int> { 1, 2, 3, 4, 5, 6, 7 };
-            }
-        }
 
         public void NotifyRoundCompleted()
         {

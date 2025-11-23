@@ -10,16 +10,20 @@ public class DronePlayer : MonoBehaviour
     public float volFadeSecs = 0.12f;
     public float pitchRampSecs = 0.08f;
 
+    [Header("Auto-Start")]
+    [Tooltip("If true, drone will start automatically when GameObject is enabled. If false, must call Start() manually.")]
+    [SerializeField] bool autoStart = false;
+
     EventInstance _inst;
     Coroutine _volCo, _pitCo;
 
     void OnEnable()
     {
-        _inst = RuntimeManager.CreateInstance(droneEvent);
-        _inst.setVolume(0f);
-        _inst.start();                         // event loops in FMOD
-        if (isActiveAndEnabled) _volCo = StartCoroutine(FadeVolCo(0f, startVolume, volFadeSecs));
-        else _inst.setVolume(startVolume);
+        // Only auto-start if enabled
+        if (autoStart)
+        {
+            StartDrone();
+        }
     }
 
     // --- public API ---
@@ -37,6 +41,53 @@ public class DronePlayer : MonoBehaviour
         if (_volCo != null) StopCoroutine(_volCo);
         if (isActiveAndEnabled) _volCo = StartCoroutine(FadeVolCo(GetCurrentVol(), v, volFadeSecs));
         else _inst.setVolume(v);
+    }
+
+    public void Stop()
+    {
+        if (_inst.isValid())
+        {
+            _inst.stop(FMOD.Studio.STOP_MODE.ALLOWFADEOUT);
+            _inst.release();
+        }
+    }
+
+    public void Play()
+    {
+        if (_inst.isValid())
+        {
+            _inst.start();
+        }
+    }
+
+    /// <summary>
+    /// Starts the drone (creates FMOD instance and begins playback with fade-in).
+    /// Safe to call multiple times - will restart if already playing.
+    /// </summary>
+    public void StartDrone()
+    {
+        // Stop existing instance if valid
+        if (_inst.isValid())
+        {
+            _inst.stop(FMOD.Studio.STOP_MODE.ALLOWFADEOUT);
+            _inst.release();
+        }
+
+        // Create new instance
+        _inst = RuntimeManager.CreateInstance(droneEvent);
+        _inst.setVolume(0f);
+        _inst.start();                         // event loops in FMOD
+        
+        // Fade in volume
+        if (isActiveAndEnabled) 
+        {
+            if (_volCo != null) StopCoroutine(_volCo);
+            _volCo = StartCoroutine(FadeVolCo(0f, startVolume, volFadeSecs));
+        }
+        else 
+        {
+            _inst.setVolume(startVolume);
+        }
     }
 
     // --- lifecycle cleanup ---

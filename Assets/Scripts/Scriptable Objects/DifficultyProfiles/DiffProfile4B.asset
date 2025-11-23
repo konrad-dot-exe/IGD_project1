@@ -1,0 +1,43 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3646f100bbc97b44984c026ba0f999d7, type: 3}
+  m_Name: DiffProfile4B
+  m_EditorClassIdentifier: 
+  displayName: 4
+  notes: 'G3 A3 B3 C4
+
+    Stepwise + Thirds'
+  melodyLength: 5
+  noteDuration: 0.4
+  noteGap: 0.1
+  randomizeModeEachRound: 0
+  allowedModes: 00000000
+  registerMinMidi: 55
+  registerMaxMidi: 67
+  allowedDegrees: 01010101010101
+  allowedStartDegrees: 01010000010101
+  allowedEndDegrees: 01000000010000
+  movementPolicy: 1
+  maxLeapSteps: 5
+  difficulty: 1
+  contour: 0
+  enableTendencies: 1
+  tendencyResolveProbability: 0.8
+  allowSmallDetours: 1
+  preRollSeconds: 1
+  replayPreRollMultiplier: 0.5
+  playbackVelocity: 0.9
+  pointsPerNote: 100
+  pointsWrongNote: -100
+  pointsReplay: -25
+  pointsPerSecondInput: -5
+  maxWrongPerRound: 3

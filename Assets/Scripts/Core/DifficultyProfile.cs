@@ -3,6 +3,7 @@ using EarFPS;
 
 namespace Sonoria.Dictation {
 public enum MovementSet { Stepwise, StepwisePlusThirds, DiatonicUpToFifths, DiatonicAll }
+public enum MovementPolicy { StepwiseOnly, UpToMaxLeap }
 // public enum MelodyDifficulty { Beginner, Intermediate, Advanced }
 // public enum ContourType { Random, Arch, InvertedArch, Ascending, Descending }
 // public enum ScaleMode { Ionian, Dorian, Phrygian, Lydian, Mixolydian, Aeolian, Locrian }
@@ -40,8 +41,12 @@ public bool[] allowedEndDegrees = new bool[7]{ true,false,false,false,false,fals
 
 
 [Header("Movement")]
-public bool allowLeaps = false;
-public MovementSet movement = MovementSet.Stepwise;
+[Tooltip("Movement policy: StepwiseOnly = only ±1 diatonic step, UpToMaxLeap = allows leaps up to maxLeapSteps.")]
+public MovementPolicy movementPolicy = MovementPolicy.UpToMaxLeap;
+
+[Tooltip("Maximum diatonic steps allowed for leaps (1=stepwise only, 2=thirds, 3=fourths, ..., 8=octaves). Only used when movementPolicy is UpToMaxLeap.")]
+[Range(1, 8)]
+public int maxLeapSteps = 1;
 
 
 [Header("Contour & Difficulty Biasing")]
@@ -67,5 +72,7 @@ public MelodyDifficulty difficulty = MelodyDifficulty.Beginner;
  public int pointsReplay = -25;
  public float pointsPerSecondInput = -5f;
  public int maxWrongPerRound = 3;
+ [Tooltip("Time limit per round in seconds. Player loses if time expires.")]
+ public float timeLimitPerRound = 60.0f;
 }
 }

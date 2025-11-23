@@ -11,6 +11,8 @@ public class FmodSfxPlayer : MonoBehaviour
     public EventReference uiCardsSweep;
     public EventReference lightning;
     public EventReference thunder;
+    public EventReference cardSlap;
+    public EventReference sparkles;
 
     public void PlayWin()        => Play(uiWin);
     public void PlayWrong()      => Play(uiWrong);
@@ -18,6 +20,8 @@ public class FmodSfxPlayer : MonoBehaviour
     public void PlayCardsSweep() => Play(uiCardsSweep);
     public void PlayLightning() => Play(lightning);
     public void PlayThunder() => Play(thunder);
+    public void PlayCardSlap() => Play(cardSlap);
+    public void PlaySparkles() => Play(sparkles);
 
     void Play(EventReference ev)
     {

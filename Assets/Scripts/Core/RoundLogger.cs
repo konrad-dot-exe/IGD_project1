@@ -26,7 +26,7 @@ namespace Sonoria.Dictation {
     len = p.melodyLength, dur = p.noteDuration, gap = p.noteGap,
     modes = string.Join(",", p.allowedModes), regMin = p.registerMinMidi, regMax = p.registerMaxMidi,
     degrees = p.allowedDegrees, start = p.allowedStartDegrees, end = p.allowedEndDegrees,
-    movement = p.movement.ToString(), diff = p.difficulty.ToString(), //contour = p.contour.ToString(),
+    movement = p.movementPolicy.ToString(), diff = p.difficulty.ToString(), //contour = p.contour.ToString(),
     tendencies = p.enableTendencies, tendProb = p.tendencyResolveProbability, detours = p.allowSmallDetours,
     preRoll = p.preRollSeconds, replayRoll = p.replayPreRollMultiplier, vel = p.playbackVelocity,
     pNote = p.pointsPerNote, pWrong = p.pointsWrongNote, pReplay = p.pointsReplay, maxWrong = p.maxWrongPerRound, pPerSec = p.pointsPerSecondInput

@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a1b46d07bce00fa4987a055128fb99fb, type: 3}
+  m_Name: 2_Node_Mixolydian
+  m_EditorClassIdentifier: 
+  mode: 4
+  levels:
+  - {fileID: 11400000, guid: 10e13d252a5be0d4e907541d7a0d349a, type: 2}
+  - {fileID: 11400000, guid: 19d80d23ec8f1244591f289830d6c991, type: 2}
+  - {fileID: 11400000, guid: eb575d631e091ca49a66b011bd856e6c, type: 2}
+  - {fileID: 11400000, guid: 20b0a1ec6ef12364d83f828f5f071b37, type: 2}
+  - {fileID: 11400000, guid: 66473cbc5398f264386c14a2f86fa239, type: 2}
+  - {fileID: 11400000, guid: 656491ea9cb71fc4a97b16b0a7ca22e6, type: 2}

@@ -16,6 +16,7 @@ public class PianoKeyUI : MonoBehaviour, IPointerDownHandler, IPointerUpHandler,
 
     Image _img;
     bool _isDown;
+    float _baseOpacity = 1.0f; // Track the opacity set by SetOpacity
 
     void Awake() { _img = GetComponent<Image>(); _img.color = upColor; }
 
@@ -23,7 +24,9 @@ public class PianoKeyUI : MonoBehaviour, IPointerDownHandler, IPointerUpHandler,
     {
         if (_isDown) return;
         _isDown = true;
-        _img.color = downColor;
+        var c = downColor;
+        c.a = _baseOpacity; // Preserve base opacity
+        _img.color = c;
         NoteOn?.Invoke(midiNote, fixedVelocity);
     }
 
@@ -33,15 +36,30 @@ public class PianoKeyUI : MonoBehaviour, IPointerDownHandler, IPointerUpHandler,
     void Release()
     {
         _isDown = false;
-        _img.color = upColor;
+        if (_img == null) return;
+        var c = upColor;
+        c.a = _baseOpacity; // Preserve base opacity
+        _img.color = c;
         NoteOff?.Invoke(midiNote);
     }
 
     // For external highlighting (e.g., while the melody plays)
     public void Highlight(bool on)
     {
-        _img.color = on ? downColor : upColor;
+        if (_img == null) return;
+        var c = on ? downColor : upColor;
+        c.a = _baseOpacity; // Preserve base opacity
+        _img.color = c;
     }
 
+    // Set opacity (alpha) while preserving RGB color values
+    public void SetOpacity(float alpha)
+    {
+        if (_img == null) return;
+        _baseOpacity = Mathf.Clamp01(alpha); // Store the base opacity
+        var c = _img.color;
+        c.a = _baseOpacity;
+        _img.color = c;
+    }
 
 }

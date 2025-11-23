@@ -1,6 +1,7 @@
 using TMPro;
 using UnityEngine;
 using System.Collections;
+using FMODUnity;
 
 [DisallowMultipleComponent]
 public class CardController : MonoBehaviour
@@ -17,6 +18,7 @@ public class CardController : MonoBehaviour
     [SerializeField] CardFlipper flipper;
     [SerializeField] CardHighlighter highlighter;
     [SerializeField] Rigidbody rb;
+    [SerializeField] EventReference cardSlapEvent;
 
     [Header("Drop Settings")]
     [SerializeField] bool usePhysicsDrop = true;
@@ -28,6 +30,7 @@ public class CardController : MonoBehaviour
     [SerializeField] string tableTag = "Table";
 
     bool settling;
+    private bool hasPlayedSlapSound = false;
 
     // --- DEBUG MENUS ---
     [ContextMenu("Debug/Reveal")]        void _dbg_Reveal() => Reveal();
@@ -51,6 +54,7 @@ public class CardController : MonoBehaviour
         if (flipper) flipper.InstantFaceDown();
         if (highlighter) highlighter.Set(false);
         if (rb) rb.WakeUp();
+        hasPlayedSlapSound = false; // Reset flag for card reuse
         gameObject.SetActive(true);
     }
 
@@ -140,6 +144,14 @@ public class CardController : MonoBehaviour
         if (!usePhysicsDrop || !settling || !rb) return;
         if (!string.IsNullOrEmpty(tableTag) && c.collider.CompareTag(tableTag))
         {
+            // Play card slap sound on first table contact
+            if (!hasPlayedSlapSound && !cardSlapEvent.IsNull)
+            {
+                Vector3 soundPosition = c.contactCount > 0 ? c.contacts[0].point : transform.position;
+                RuntimeManager.PlayOneShot(cardSlapEvent, soundPosition);
+                hasPlayedSlapSound = true;
+            }
+            
             // Nudge to stop sliding forever on first contact
             if (!rb.isKinematic) rb.linearVelocity = Vector3.zero;
             if (!rb.isKinematic) rb.angularVelocity = Vector3.zero; 

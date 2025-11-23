@@ -43,10 +43,16 @@ namespace EarFPS
         [Header("Behavior")]
         [SerializeField] MelodyDifficulty difficulty = MelodyDifficulty.Beginner;
         [SerializeField] ContourType contour = ContourType.Random;
-        [Tooltip("When OFF, restrict to stepwise motion regardless of difficulty.")]
-        [SerializeField] bool allowLeaps = true;
         [Tooltip("Probability that a leap resolves immediately by stepback; if not, next step is forced to resolve.")]
         [Range(0f, 1f)] public float immediateLeapResolutionProbability = 0.80f;
+
+        [Header("Movement")]
+        [Tooltip("Movement policy from DifficultyProfile. StepwiseOnly = only ±1 diatonic step, UpToMaxLeap = allows leaps up to maxLeapSteps.")]
+        [SerializeField] Sonoria.Dictation.MovementPolicy movementPolicy = Sonoria.Dictation.MovementPolicy.UpToMaxLeap;
+        
+        [Tooltip("Maximum diatonic steps for leaps (from DifficultyProfile). Only used when movementPolicy is UpToMaxLeap.")]
+        [Range(1, 8)]
+        [SerializeField] int maxLeapSteps = 8;
 
         [Header("Anchors (Degrees 1..7)")]
         [SerializeField] bool[] allowedDegrees = null;
@@ -292,7 +298,6 @@ namespace EarFPS
         {
             var list = new List<Candidate>(16);
             var allowedSteps = GetAllowedDiatonicSteps();
-            if (!allowLeaps) allowedSteps = new int[] { 1 };
 
             foreach (int steps in allowedSteps)
             {
@@ -684,13 +689,37 @@ namespace EarFPS
 
         int[] GetAllowedDiatonicSteps()
         {
-            if (!allowLeaps) return new[] { 1 };
-            switch (difficulty)
+            // StepwiseOnly: only allow stepwise motion (±1 diatonic step)
+            if (movementPolicy == Sonoria.Dictation.MovementPolicy.StepwiseOnly)
             {
-                case MelodyDifficulty.Beginner: return new[] { 1, 2 };
-                case MelodyDifficulty.Intermediate: return new[] { 1, 2, 3, 4 };
-                default: return new[] { 1, 2, 3, 4, 5, 6, 7 };
+                return new[] { 1 };
             }
+            
+            // UpToMaxLeap: allow leaps up to maxLeapSteps (1-8 diatonic steps)
+            if (movementPolicy == Sonoria.Dictation.MovementPolicy.UpToMaxLeap && maxLeapSteps >= 1 && maxLeapSteps <= 8)
+            {
+                // Generate array of allowed steps from 1 to maxLeapSteps
+                int[] steps = new int[maxLeapSteps];
+                for (int i = 0; i < maxLeapSteps; i++)
+                {
+                    steps[i] = i + 1;
+                }
+                return steps;
+            }
+            
+            // Default fallback (should not normally reach here)
+            return new[] { 1 };
+        }
+
+        // Public setters for movement policy (used by DifficultyProfileApplier)
+        public void SetMovementPolicy(Sonoria.Dictation.MovementPolicy policy)
+        {
+            movementPolicy = policy;
+        }
+
+        public void SetMaxLeapSteps(int steps)
+        {
+            maxLeapSteps = Mathf.Clamp(steps, 1, 8);
         }
         
         // Adjusts candidate list based on current tendency obligations.

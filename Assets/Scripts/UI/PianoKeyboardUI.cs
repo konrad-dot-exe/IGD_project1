@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
+using EarFPS;
 
 public class PianoKeyboardUI : MonoBehaviour
 {
@@ -35,7 +36,12 @@ public class PianoKeyboardUI : MonoBehaviour
     bool inputLocked;
     Coroutine fadeCo;
 
+    [Header("Featured Notes Opacity")]
+    [Tooltip("Opacity for keys that are NOT featured in the current difficulty level. Featured keys remain at 1.0.")]
+    [SerializeField, Range(0f, 1f)] float nonFeaturedKeyOpacity = 0.3f;
+
     HashSet<int> heldNotes = new HashSet<int>();  // track down notes
+    HashSet<int> featuredNotes = new HashSet<int>();  // MIDI notes that are featured (allowed degrees)
 
     readonly int[] whitePCs = {0,2,4,5,7,9,11};      // pitch-classes with white keys
     readonly int[] blackPCs = {1,3,6,8,10};         // black keys
@@ -60,6 +66,9 @@ public class PianoKeyboardUI : MonoBehaviour
 
         // Start unlocked
         ApplyLockVisual(false, immediate: true);
+
+        // Apply featured notes opacity (in case SetFeaturedNotes was called before keyboard was built)
+        UpdateKeyOpacityForFeaturedNotes();
     }
     
     void OnDisable()
@@ -288,6 +297,110 @@ public class PianoKeyboardUI : MonoBehaviour
             canvasGroup.alpha = 1f;
             canvasGroup.interactable = true;
             canvasGroup.blocksRaycasts = true;
+        }
+    }
+
+    // --- Featured Notes Opacity System ---
+
+    /// <summary>
+    /// Sets which notes are featured based on the current difficulty profile.
+    /// Featured keys remain at full opacity (1.0), non-featured keys are dimmed.
+    /// </summary>
+    public void SetFeaturedNotes(EarFPS.ScaleMode mode, bool[] allowedDegrees, int registerMin, int registerMax)
+    {
+        featuredNotes = GetFeaturedMidiNotes(mode, allowedDegrees, registerMin, registerMax);
+        UpdateKeyOpacityForFeaturedNotes();
+    }
+
+    /// <summary>
+    /// Overload that accepts mode as int to avoid assembly reference issues.
+    /// </summary>
+    public void SetFeaturedNotes(int modeInt, bool[] allowedDegrees, int registerMin, int registerMax)
+    {
+        SetFeaturedNotes((EarFPS.ScaleMode)modeInt, allowedDegrees, registerMin, registerMax);
+    }
+
+    /// <summary>
+    /// Gets the set of MIDI notes that correspond to allowed scale degrees in the given mode and register.
+    /// Returns empty set if unrestricted (null or all-false allowedDegrees).
+    /// </summary>
+    static HashSet<int> GetFeaturedMidiNotes(EarFPS.ScaleMode mode, bool[] allowedDegrees, int registerMin, int registerMax)
+    {
+        var result = new HashSet<int>();
+
+        // If unrestricted, return empty set (all keys will be shown at full opacity)
+        if (allowedDegrees == null || allowedDegrees.Length != 7)
+            return result;
+
+        bool anyAllowed = false;
+        for (int i = 0; i < 7; i++)
+        {
+            if (allowedDegrees[i])
+            {
+                anyAllowed = true;
+                break;
+            }
+        }
+        if (!anyAllowed)
+            return result;
+
+        // Get pitch-class array for the mode (same mapping as MelodyGenerator)
+        int[] degreeOrder = mode switch
+        {
+            EarFPS.ScaleMode.Ionian     => new int[] { 0, 2, 4, 5, 7, 9, 11 },
+            EarFPS.ScaleMode.Dorian     => new int[] { 0, 2, 3, 5, 7, 9, 10 },
+            EarFPS.ScaleMode.Phrygian   => new int[] { 0, 1, 3, 5, 7, 8, 10 },
+            EarFPS.ScaleMode.Lydian     => new int[] { 0, 2, 4, 6, 7, 9, 11 },
+            EarFPS.ScaleMode.Mixolydian => new int[] { 0, 2, 4, 5, 7, 9, 10 },
+            EarFPS.ScaleMode.Aeolian    => new int[] { 0, 2, 3, 5, 7, 8, 10 },
+            _ => new int[] { 0, 2, 4, 5, 7, 9, 11 } // Ionian fallback
+        };
+
+        // For each allowed degree (1-7), collect all MIDI notes in register with matching pitch-class
+        for (int degree = 1; degree <= 7; degree++)
+        {
+            if (!allowedDegrees[degree - 1]) continue; // Skip if this degree is not allowed
+
+            int targetPC = degreeOrder[degree - 1]; // Pitch-class for this degree
+
+            // Collect all MIDI notes in register range with this pitch-class
+            for (int midi = registerMin; midi <= registerMax; midi++)
+            {
+                if (PitchClass(midi) == targetPC)
+                {
+                    result.Add(midi);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Updates the opacity of all keys based on whether they are featured.
+    /// Featured keys: opacity 1.0, Non-featured keys: opacity from nonFeaturedKeyOpacity.
+    /// </summary>
+    void UpdateKeyOpacityForFeaturedNotes()
+    {
+        // If no featured notes (unrestricted), show all keys at full opacity
+        if (featuredNotes.Count == 0)
+        {
+            foreach (var kvp in _keyByNote)
+            {
+                if (kvp.Value != null)
+                    kvp.Value.SetOpacity(1.0f);
+            }
+            return;
+        }
+
+        // Set opacity based on whether key is featured
+        foreach (var kvp in _keyByNote)
+        {
+            if (kvp.Value == null) continue;
+
+            bool isFeatured = featuredNotes.Contains(kvp.Key);
+            float opacity = isFeatured ? 1.0f : nonFeaturedKeyOpacity;
+            kvp.Value.SetOpacity(opacity);
         }
     }
     

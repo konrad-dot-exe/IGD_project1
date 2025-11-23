@@ -7,9 +7,9 @@ using UnityEngine.Networking;
 
 public class OpenAIProvider : MonoBehaviour, ILLMProvider
 {
-    [Header("OpenAI")]
-    [Tooltip("Paste your API key here in the Editor for now (don’t commit to git).")]
-    public string apiKey;
+    // [Header("OpenAI")]
+    // [Tooltip("Paste your API key here in the Editor for now (don’t commit to git).")]
+    // public string apiKey;
 
     [Tooltip("Chat Completions endpoint")]
     public string endpoint = "https://api.openai.com/v1/chat/completions";
@@ -22,16 +22,21 @@ public class OpenAIProvider : MonoBehaviour, ILLMProvider
 
     public async Task<string> SendAsync(string userPrompt)
     {
+        var apiKey = System.Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+        //Debug.Log(apiKey);
         if (string.IsNullOrWhiteSpace(apiKey))
-            throw new System.Exception("OpenAIProvider: Missing API key.");
+            throw new System.Exception("OpenAIProvider: Missing OPENAI_API_KEY (env).");
+
+        // Optional: support org via env
+        var orgId = System.Environment.GetEnvironmentVariable("OPENAI_ORG_ID");
 
         var reqBody = new ChatRequest
         {
             model = model,
-            messages = new List<Message>
+            messages = new List<ChatMessage>
             {
-                new Message{ role="system", content=systemPreamble },
-                new Message{ role="user", content=userPrompt }
+                new ChatMessage { role="system", content=systemPreamble },
+                new ChatMessage { role="user",   content=userPrompt }
             }
         };
 
@@ -44,52 +49,62 @@ public class OpenAIProvider : MonoBehaviour, ILLMProvider
             req.downloadHandler = new DownloadHandlerBuffer();
             req.SetRequestHeader("Content-Type", "application/json");
             req.SetRequestHeader("Authorization", "Bearer " + apiKey);
+            if (!string.IsNullOrEmpty(orgId))
+                req.SetRequestHeader("OpenAI-Organization", orgId);
+            req.SetRequestHeader("Accept", "application/json");
+
+            // Prevent indefinite hang
+            req.timeout = 60; // seconds
 
             var op = req.SendWebRequest();
             while (!op.isDone) await Task.Yield();
 
+            // Better error surfacing
             if (req.result != UnityWebRequest.Result.Success)
-                throw new System.Exception($"HTTP error: {req.result} | {req.error} | {req.downloadHandler.text}");
+                throw new System.Exception(
+                    $"HTTP {(int)req.responseCode} {req.result}: {req.error}\n{req.downloadHandler.text}");
 
             var responseJson = req.downloadHandler.text;
             var parsed = JsonConvert.DeserializeObject<ChatResponse>(responseJson);
 
             if (parsed?.choices != null && parsed.choices.Count > 0)
-                return parsed.choices[0]?.message?.content?.Replace("\\n", "\n");
+                return parsed.choices[0]?.message?.content ?? "(Empty content)";
 
             return "(No content in response.)";
         }
     }
 
-    // ====== DTOs for request/response ======
-    [System.Serializable]
-    public class ChatRequest
-    {
-        public string model;
-        public List<Message> messages;
-        // You can add temperature, max_tokens, response_format, etc.
-    }
+    // // ---- DTOs ----
+    // [System.Serializable]
+    // public class ChatRequest
+    // {
+    //     public string model;
+    //     public List<Message> messages;
 
-    [System.Serializable]
-    public class Message
-    {
-        public string role;
-        public string content;
-    }
+    //     // Optional tuning:
+    //     public float? temperature;
+    //     public int? max_tokens;
 
-    [System.Serializable]
-    public class ChatResponse
-    {
-        public List<Choice> choices;
-    }
+    //     // Strict JSON responses when needed:
+    //     public ResponseFormat response_format;
+    // }
 
-    [System.Serializable]
-    public class Choice
-    {
-        public Message message;
-        public int index;
-        public object logprobs; // unused
-        public string finish_reason;
-    }
+    // [System.Serializable]
+    // public class ResponseFormat { public string type; } // e.g., "json_object"
 }
 
+// ===== DTOs (outside the class) =====
+[System.Serializable]
+public class ChatRequest
+{
+    public string model;
+    public List<ChatMessage> messages;
+    public float? temperature;
+    public int? max_tokens;
+    public ResponseFormat response_format;
+}
+
+[System.Serializable] public class ChatMessage { public string role; public string content; }
+[System.Serializable] public class ChatResponse { public List<Choice> choices; }
+[System.Serializable] public class Choice { public ChatMessage message; public int index; public object logprobs; public string finish_reason; }
+[System.Serializable] public class ResponseFormat { public string type; }

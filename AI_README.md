@@ -1,7 +1,3 @@
-# AI Readme — Unity Project Map (Template)
-
-_Purpose_: Give an AI assistant a fast mental model of this project so its suggestions land in the right files.
-
 ## Project Overview
 - **Game name**: Sonoria
 - **Unity version**: 6.0

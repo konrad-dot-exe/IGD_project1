@@ -42,6 +42,7 @@
 | `IntervalTrainer.unity` | Interactive scene likely focused on interval ear-training exercises. |
 | `MainMenu.unity` | Entry point menu for navigating to core modes. |
 | `MelodicDictation.unity` | Gameplay scene for melodic dictation practice. |
+| `LLM_Chat_Terminal.unity` | Sandbox for experimenting with LLM API assisted tasks. |
 
 ### Scripts
 

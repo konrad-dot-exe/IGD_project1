@@ -4,12 +4,13 @@ using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using TMPro;
 using UnityEngine.SceneManagement;
+using Sonoria.Dictation;
 
 namespace EarFPS
 {
     public class EndScreenController : MonoBehaviour
     {
-        public enum Mode { Interval, Dictation }
+        public enum Mode { Interval, Dictation, Campaign }
         [Header("General")]
         [SerializeField] Mode mode = Mode.Interval;           // <- pick per scene
         [SerializeField] CanvasGroup group;
@@ -32,6 +33,16 @@ namespace EarFPS
         [SerializeField] Button btnDashboard;
         [SerializeField] Selectable firstFocus;
 
+        [Header("Campaign Mode Buttons")]
+        [Tooltip("Continue button (shown in campaign mode - goes to next level)")]
+        [SerializeField] Button btnContinue;
+        [Tooltip("Back to Map button (shown in campaign mode - returns to level picker)")]
+        [SerializeField] Button btnBackToMap;
+        [Tooltip("Reference to CampaignLevelPicker (to show level picker when Back is clicked)")]
+        [SerializeField] CampaignLevelPicker campaignLevelPicker;
+        [Tooltip("Reference to CampaignMapView (fallback if level picker is not available)")]
+        [SerializeField] CampaignMapView campaignMapView;
+
         [Header("Navigation")]
         [SerializeField] string retrySceneName = "";
         [SerializeField] string dashboardSceneName = "MainMenu";
@@ -40,12 +51,54 @@ namespace EarFPS
         CursorLockMode _prevLock;
         bool _prevCursor;
 
+        private bool isInitialized = false;
+
         void Awake()
         {
-            if (!group) group = GetComponent<CanvasGroup>();
-            if (btnRetry)     btnRetry.onClick.AddListener(OnClickRetry);
-            if (btnDashboard) btnDashboard.onClick.AddListener(OnClickDashboard);
+            Initialize();
             HideImmediate();
+        }
+
+        /// <summary>
+        /// Ensures the endscreen is initialized (component references, button listeners).
+        /// Safe to call multiple times. Will be called automatically in Awake(), but can be called
+        /// manually if the GameObject was disabled and needs to be initialized on first show.
+        /// </summary>
+        void Initialize()
+        {
+            if (isInitialized) return;
+
+            // Ensure GameObject is active for initialization
+            if (!gameObject.activeSelf)
+            {
+                gameObject.SetActive(true);
+            }
+
+            if (!group) group = GetComponent<CanvasGroup>();
+            
+            // Setup button listeners (safe to call multiple times - RemoveAllListeners first)
+            if (btnRetry != null)
+            {
+                btnRetry.onClick.RemoveAllListeners();
+                btnRetry.onClick.AddListener(OnClickRetry);
+            }
+            if (btnDashboard != null)
+            {
+                btnDashboard.onClick.RemoveAllListeners();
+                btnDashboard.onClick.AddListener(OnClickDashboard);
+            }
+            if (btnContinue != null)
+            {
+                btnContinue.onClick.RemoveAllListeners();
+                btnContinue.onClick.AddListener(OnClickContinue);
+            }
+            if (btnBackToMap != null)
+            {
+                btnBackToMap.onClick.RemoveAllListeners();
+                btnBackToMap.onClick.AddListener(OnClickBackToMap);
+            }
+
+            isInitialized = true;
         }
 
         // Keep existing API for Interval module
@@ -74,10 +127,49 @@ namespace EarFPS
         // New: Dictation-specific API
         public void ShowDictation(int score, int roundsCompleted, float timeSeconds, string titleOverride = "Game Over")
         {
-            mode = Mode.Dictation;
+            // Check if we're in campaign mode
+            bool isCampaignMode = CampaignService.Instance != null && CampaignService.Instance.CurrentLevel != null;
+
+            if (isCampaignMode)
+            {
+                ShowCampaign(score, roundsCompleted, timeSeconds, titleOverride);
+            }
+            else
+            {
+                mode = Mode.Dictation;
+                ApplyCommonOpen();
+
+                title.text = string.IsNullOrEmpty(titleOverride) ? "Game Over" : titleOverride;
+
+                // Hide Interval refs
+                SetActive(statScore, false);
+                SetActive(statTime, false);
+                SetActive(statAccuracy, false);
+                SetActive(statDestroyed, false);
+                SetActive(statBestStreak, false);
+
+                // Show Dictation refs
+                SetActive(dictScore, true);  dictScore.text  = $"Score: <b>{score:n0}</b>";
+                SetActive(dictTime,  true);  dictTime.text   = $"Time: <b>{FormatTime(timeSeconds)}</b>";
+                SetActive(dictRounds,true);  dictRounds.text = $"Rounds: <b>{roundsCompleted}</b>";
+
+                // Hide campaign buttons, show normal buttons
+                SetActive(btnContinue, false);
+                SetActive(btnBackToMap, false);
+                SetActive(btnRetry, true);
+                SetActive(btnDashboard, true);
+
+                FocusFirst();
+            }
+        }
+
+        // New: Campaign-specific API
+        public void ShowCampaign(int score, int roundsCompleted, float timeSeconds, string titleOverride = "Level Complete!")
+        {
+            mode = Mode.Campaign;
             ApplyCommonOpen();
 
-            title.text = string.IsNullOrEmpty(titleOverride) ? "Game Over" : titleOverride;
+            title.text = string.IsNullOrEmpty(titleOverride) ? "Level Complete!" : titleOverride;
 
             // Hide Interval refs
             SetActive(statScore, false);
@@ -91,6 +183,64 @@ namespace EarFPS
             SetActive(dictTime,  true);  dictTime.text   = $"Time: <b>{FormatTime(timeSeconds)}</b>";
             SetActive(dictRounds,true);  dictRounds.text = $"Rounds: <b>{roundsCompleted}</b>";
 
+            // Check if this is a game over (player failed) or level completion (player succeeded)
+            bool isGameOver = !string.IsNullOrEmpty(titleOverride) && titleOverride.ToLower().Contains("game over");
+
+            if (isGameOver)
+            {
+                // Game Over: Player failed - can only retry same level or go back to map
+                // Hide Continue button (cannot proceed to next level)
+                SetActive(btnContinue, false);
+                
+                // Show Retry button (retry same level)
+                SetActive(btnRetry, true);
+                
+                // Show Back to Map button
+                SetActive(btnBackToMap, true);
+                
+                // Hide Dashboard button (campaign mode)
+                SetActive(btnDashboard, false);
+            }
+            else
+            {
+                // Level Complete: Player succeeded - can continue to next level or go back to map
+                // Hide Retry button (no need to retry)
+                SetActive(btnRetry, false);
+                SetActive(btnDashboard, false);
+
+                // Always show Back to Map button
+                SetActive(btnBackToMap, true);
+
+                // Show Continue button only if there's a next level
+                if (btnContinue != null && CampaignService.Instance != null)
+                {
+                    int nextLevel = CampaignService.Instance.GetCurrentNodeNextLevel();
+                    if (nextLevel >= 0)
+                    {
+                        // There's a next level - show Continue button
+                        SetActive(btnContinue, true);
+                        btnContinue.interactable = true;
+                        
+                        // Update button text
+                        var continueText = btnContinue.GetComponentInChildren<TextMeshProUGUI>();
+                        if (continueText != null)
+                        {
+                            continueText.text = "Continue";
+                        }
+                    }
+                    else
+                    {
+                        // All levels complete - hide Continue button
+                        SetActive(btnContinue, false);
+                    }
+                }
+                else
+                {
+                    // Fallback: hide Continue button if CampaignService is not available
+                    SetActive(btnContinue, false);
+                }
+            }
+
             FocusFirst();
         }
 
@@ -98,10 +248,23 @@ namespace EarFPS
         public void OnClickRetry()
         {
             Hide();
-            string sceneToLoad = string.IsNullOrEmpty(retrySceneName)
-                ? SceneManager.GetActiveScene().name
-                : retrySceneName;
-            SceneManager.LoadScene(sceneToLoad, LoadSceneMode.Single);
+            
+            // Try to restart without reloading the scene
+            var dictationController = FindFirstObjectByType<MelodicDictationController>();
+            if (dictationController != null)
+            {
+                // Restart the round (will trigger environment reinitialization if game over occurred)
+                dictationController.StartRound();
+            }
+            else
+            {
+                // Fallback: reload scene if controller not found
+                Debug.LogWarning("[EndScreenController] MelodicDictationController not found. Falling back to scene reload.");
+                string sceneToLoad = string.IsNullOrEmpty(retrySceneName)
+                    ? SceneManager.GetActiveScene().name
+                    : retrySceneName;
+                SceneManager.LoadScene(sceneToLoad, LoadSceneMode.Single);
+            }
         }
         public void OnClickDashboard()
         {
@@ -110,14 +273,76 @@ namespace EarFPS
                 SceneManager.LoadScene(dashboardSceneName, LoadSceneMode.Single);
         }
 
+        // Campaign mode buttons
+        public void OnClickContinue()
+        {
+            Hide();
+            
+            if (CampaignService.Instance != null)
+            {
+                // Start next level in current node
+                CampaignService.Instance.StartNextLevel();
+            }
+        }
+
+        public void OnClickBackToMap()
+        {
+            Hide();
+            
+            // Show level picker for current node
+            if (campaignLevelPicker != null && CampaignService.Instance != null)
+            {
+                int currentNodeIndex = CampaignService.Instance.CurrentNodeIndex;
+                if (currentNodeIndex >= 0)
+                {
+                    campaignLevelPicker.ShowForNode(currentNodeIndex);
+                }
+                else
+                {
+                    Debug.LogWarning("[EndScreenController] No current node index available. Falling back to map view.");
+                    // Fallback to map view
+                    if (campaignMapView != null)
+                    {
+                        campaignMapView.Show();
+                    }
+                }
+            }
+            else
+            {
+                // Fallback to map view if level picker is not available
+                if (campaignMapView != null)
+                {
+                    campaignMapView.Show();
+                }
+                else
+                {
+                    Debug.LogWarning("[EndScreenController] Neither CampaignLevelPicker nor CampaignMapView is assigned! Cannot navigate back.");
+                }
+            }
+        }
+
         // Open/close
         void ApplyCommonOpen()
         {
+            // Ensure initialization before showing (in case GameObject was disabled in editor)
+            Initialize();
+
+            // Hide keyboard UI when end screen appears
+            var keyboardUI = FindFirstObjectByType<PianoKeyboardUI>();
+            if (keyboardUI != null)
+            {
+                keyboardUI.HideImmediate();
+            }
+
             _prevTimeScale = Time.timeScale;  Time.timeScale = 0f;
             _prevLock = Cursor.lockState;     _prevCursor = Cursor.visible;
             Cursor.lockState = CursorLockMode.None; Cursor.visible = true;
 
-            group.alpha = 1f; group.interactable = true; group.blocksRaycasts = true;
+            if (!group) group = GetComponent<CanvasGroup>();
+            if (group != null)
+            {
+                group.alpha = 1f; group.interactable = true; group.blocksRaycasts = true;
+            }
             gameObject.SetActive(true);
         }
         public void Hide()
@@ -136,7 +361,26 @@ namespace EarFPS
         {
             var es = EventSystem.current;
             if (!es) return;
-            GameObject go = (firstFocus ? firstFocus.gameObject : (btnRetry ? btnRetry.gameObject : null));
+            
+            // Determine which button to focus based on what's visible
+            GameObject go = null;
+            if (firstFocus != null)
+            {
+                go = firstFocus.gameObject;
+            }
+            else if (btnRetry != null && btnRetry.gameObject.activeSelf)
+            {
+                go = btnRetry.gameObject;
+            }
+            else if (btnContinue != null && btnContinue.gameObject.activeSelf)
+            {
+                go = btnContinue.gameObject;
+            }
+            else if (btnBackToMap != null && btnBackToMap.gameObject.activeSelf)
+            {
+                go = btnBackToMap.gameObject;
+            }
+            
             es.SetSelectedGameObject(go);
         }
 

@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 384369f58d0113d4c9db601162ee44c4, type: 3}
+  m_Name: DictationCampaign
+  m_EditorClassIdentifier: 
+  nodes:
+  - {fileID: 11400000, guid: 1dbc34ebf0793334e8259a63499c6d9c, type: 2}
+  - {fileID: 11400000, guid: 2f146bac1a5cedc4c8b87c552cd1d08c, type: 2}
+  - {fileID: 11400000, guid: 52987a2e94f792d468c3e9bf90fd266f, type: 2}
+  - {fileID: 11400000, guid: 71ec789e7a0e38445844757948e7bf8f, type: 2}
+  - {fileID: 11400000, guid: d21331e466d95144ab9d045e5b93c0fe, type: 2}
+  - {fileID: 11400000, guid: 561dba57961549c4ba25e297854f603d, type: 2}
+  startNodeIndex: 0
