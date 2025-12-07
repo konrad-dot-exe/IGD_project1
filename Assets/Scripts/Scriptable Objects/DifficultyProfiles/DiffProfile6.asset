@@ -39,3 +39,4 @@ MonoBehaviour:
   pointsReplay: -25
   pointsPerSecondInput: -5
   maxWrongPerRound: 3
+  timeLimitPerRound: 45

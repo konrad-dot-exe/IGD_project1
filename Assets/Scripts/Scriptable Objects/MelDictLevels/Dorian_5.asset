@@ -18,4 +18,4 @@ MonoBehaviour:
   profile: {fileID: 11400000, guid: af2af500150dce849b56bbc6c6d63732, type: 2}
   useModeOverride: 1
   modeOverride: 1
-  roundsToWin: 5
+  roundsToWin: 6

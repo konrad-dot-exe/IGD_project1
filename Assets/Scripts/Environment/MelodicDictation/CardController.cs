@@ -31,6 +31,10 @@ public class CardController : MonoBehaviour
 
     bool settling;
     private bool hasPlayedSlapSound = false;
+    
+    // Static debouncing for card slap sounds (prevent too many simultaneous sounds)
+    private static float _lastCardSlapTime = -1f;
+    private static float _cardSlapDebounceInterval = 0.05f; // Max one card sound per 50ms
 
     // --- DEBUG MENUS ---
     [ContextMenu("Debug/Reveal")]        void _dbg_Reveal() => Reveal();
@@ -144,12 +148,22 @@ public class CardController : MonoBehaviour
         if (!usePhysicsDrop || !settling || !rb) return;
         if (!string.IsNullOrEmpty(tableTag) && c.collider.CompareTag(tableTag))
         {
-            // Play card slap sound on first table contact
+            // Play card slap sound on first table contact (with debouncing to prevent channel stealing)
             if (!hasPlayedSlapSound && !cardSlapEvent.IsNull)
             {
-                Vector3 soundPosition = c.contactCount > 0 ? c.contacts[0].point : transform.position;
-                RuntimeManager.PlayOneShot(cardSlapEvent, soundPosition);
-                hasPlayedSlapSound = true;
+                float timeSinceLastSlap = Time.time - _lastCardSlapTime;
+                if (timeSinceLastSlap >= _cardSlapDebounceInterval)
+                {
+                    Vector3 soundPosition = c.contactCount > 0 ? c.contacts[0].point : transform.position;
+                    RuntimeManager.PlayOneShot(cardSlapEvent, soundPosition);
+                    _lastCardSlapTime = Time.time;
+                    hasPlayedSlapSound = true;
+                }
+                else
+                {
+                    // Skip this sound to prevent too many simultaneous sounds
+                    hasPlayedSlapSound = true; // Mark as played so we don't try again
+                }
             }
             
             // Nudge to stop sliding forever on first contact

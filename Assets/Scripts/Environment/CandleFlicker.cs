@@ -59,6 +59,7 @@ public class CandleFlicker : MonoBehaviour
     bool isLit = true;
     Coroutine fadeRoutine;
     float cachedSpotBase, cachedPointBase, cachedEmissionBase;
+    float cachedFlickerAmplitude, cachedFlickerSpeed; // Cache for violent flicker restoration
 
     public bool IsLit => isLit;
 
@@ -69,6 +70,8 @@ public class CandleFlicker : MonoBehaviour
         cachedSpotBase    = spotBaseIntensity;
         cachedPointBase   = pointBaseIntensity;
         cachedEmissionBase= emissionBase;
+        cachedFlickerAmplitude = flickerAmplitude;
+        cachedFlickerSpeed = flickerSpeed;
 
         if (flameRenderer)
             flameRenderer.material.EnableKeyword("_EMISSION");
@@ -109,6 +112,19 @@ public class CandleFlicker : MonoBehaviour
     {
         if (riseSeconds <= 0f) riseSeconds = defaultRiseSeconds;
         if (fadeRoutine != null) StopCoroutine(fadeRoutine);
+        
+        // Stop any active violent flicker coroutine and restore base values immediately
+        if (_dbgRoutine != null)
+        {
+            StopCoroutine(_dbgRoutine);
+            _dbgRoutine = null;
+            // Restore base values that may have been modified by violent flicker
+            flickerAmplitude = cachedFlickerAmplitude;
+            flickerSpeed = cachedFlickerSpeed;
+            spotBaseIntensity = cachedSpotBase;
+            pointBaseIntensity = cachedPointBase;
+        }
+        
         fadeRoutine = StartCoroutine(IgniteCo(riseSeconds));
     }
 
@@ -221,11 +237,15 @@ public class CandleFlicker : MonoBehaviour
 
     IEnumerator ViolentFlickerCo(float duration, float ampMul, float speedMul, float baseMul)
     {
-        // cache current
+        // cache current (store in class fields for potential restoration if interrupted)
         float a0 = flickerAmplitude;
         float s0 = flickerSpeed;
         float spot0  = spotBaseIntensity;
         float point0 = pointBaseIntensity;
+        
+        // Update cached values in case we need to restore them
+        cachedFlickerAmplitude = a0;
+        cachedFlickerSpeed = s0;
 
         // ease in/out so it feels gusty, not a hard snap
         float t = 0f;

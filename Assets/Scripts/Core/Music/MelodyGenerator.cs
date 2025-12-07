@@ -5,12 +5,13 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using Sonoria.MusicTheory;
 
 namespace EarFPS
 {
     public enum MelodyDifficulty { Beginner, Intermediate, Advanced }
     public enum ContourType { Any, Rising, Falling, Arch, InvertedArch, Random }
-    public enum ScaleMode { Ionian, Dorian, Phrygian, Lydian, Mixolydian, Aeolian }
+    public enum ScaleMode { Ionian, Dorian, Phrygian, Lydian, Mixolydian, Aeolian, Locrian }
     
 
     [Serializable]
@@ -93,13 +94,14 @@ namespace EarFPS
         ContourType resolvedContour;
 
         // --- Mode data (C-based pitch classes for degrees 1..7) ---
-        // pc sets for each mode (tonic = C = degree 1)
-        static readonly int[] IonianPC      = { 0,2,4,5,7,9,11 };
-        static readonly int[] DorianPC      = { 0,2,3,5,7,9,10 };
-        static readonly int[] PhrygianPC    = { 0,1,3,5,7,8,10 };
-        static readonly int[] LydianPC      = { 0,2,4,6,7,9,11 };
-        static readonly int[] MixolydianPC  = { 0,2,4,5,7,9,10 };
-        static readonly int[] AeolianPC     = { 0,2,3,5,7,8,10 };
+        // Legacy hardcoded arrays removed - now using TheoryScale.GetDiatonicPitchClasses()
+        // Old arrays kept for reference:
+        // static readonly int[] IonianPC      = { 0,2,4,5,7,9,11 };
+        // static readonly int[] DorianPC      = { 0,2,3,5,7,9,10 };
+        // static readonly int[] PhrygianPC    = { 0,1,3,5,7,8,10 };
+        // static readonly int[] LydianPC      = { 0,2,4,6,7,9,11 };
+        // static readonly int[] MixolydianPC  = { 0,2,4,5,7,9,10 };
+        // static readonly int[] AeolianPC     = { 0,2,3,5,7,8,10 };
 
         // runtime caches derived from mode
         int[] degreeOrder;   // map degree 1..7 -> pitch-class
@@ -534,16 +536,10 @@ namespace EarFPS
         // ---------- Mode helpers ----------
         void ResolveModeData()
         {
-            degreeOrder = mode switch
-            {
-                ScaleMode.Ionian     => IonianPC,
-                ScaleMode.Dorian     => DorianPC,
-                ScaleMode.Phrygian   => PhrygianPC,
-                ScaleMode.Lydian     => LydianPC,
-                ScaleMode.Mixolydian => MixolydianPC,
-                ScaleMode.Aeolian    => AeolianPC,
-                _ => IonianPC
-            };
+            // Use TheoryScale to get pitch classes (centralized logic, supports all modes including Locrian)
+            Sonoria.MusicTheory.ScaleMode theoryMode = TheoryKeyUtils.FromLegacyMode(mode);
+            TheoryKey key = new TheoryKey(theoryMode);
+            degreeOrder = TheoryScale.GetDiatonicPitchClasses(key);
 
             pcMask = new bool[12];
             for (int i = 0; i < 7; i++) pcMask[degreeOrder[i]] = true;
@@ -567,14 +563,14 @@ namespace EarFPS
             }
         }
 
-        static int Mod12(int x) { int m = x % 12; return m < 0 ? m + 12 : m; }
+        static int Mod12(int x) { return TheoryPitch.PitchClassFromMidi(x); } // Wrapper for backward compatibility
         static bool InRegister(int midi, int minM, int maxM) => midi >= minM && midi <= maxM;
 
-        bool IsInScale(int midi) => pcMask[Mod12(midi)];
+        bool IsInScale(int midi) => pcMask[TheoryPitch.PitchClassFromMidi(midi)];
 
         int DegreeOf(int midi)
         {
-            int pc = Mod12(midi);
+            int pc = TheoryPitch.PitchClassFromMidi(midi);
             for (int i = 0; i < 7; i++) if (degreeOrder[i] == pc) return i + 1;
             return -1;
         }

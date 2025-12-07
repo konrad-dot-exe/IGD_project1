@@ -63,7 +63,7 @@ namespace EarFPS
                 
                 if (modeLevelText != null)
                 {
-                    modeLevelText.text = $"Mode: {modeName} — Level: {displayLevel}";
+                    modeLevelText.text = $"{modeName} — Level {displayLevel}";
                     modeLevelText.gameObject.SetActive(true);
                     isVisible = true;
                 }

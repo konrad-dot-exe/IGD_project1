@@ -38,7 +38,15 @@ public class LightningFX : MonoBehaviour
 
     [SerializeField] FmodSfxPlayer fmodSfx;
 
+    [Header("Sound Rate Limiting")]
+    [Tooltip("Minimum time between lightning sounds (prevents channel stealing)")]
+    [SerializeField] float minLightningInterval = 0.1f;
+    [Tooltip("Minimum time between thunder sounds (prevents channel stealing)")]
+    [SerializeField] float minThunderInterval = 0.2f;
+
     Coroutine flashRoutine;
+    private float _lastLightningTime = -1f;
+    private float _lastThunderTime = -1f;
 
     void Reset()
     {
@@ -68,8 +76,19 @@ public class LightningFX : MonoBehaviour
     }
     IEnumerator DoStrike(int pattern)
     {
+        // Rate limit lightning sounds to prevent channel stealing
+        float timeSinceLastLightning = Time.time - _lastLightningTime;
+        if (timeSinceLastLightning < minLightningInterval)
+        {
+            yield return new WaitForSeconds(minLightningInterval - timeSinceLastLightning);
+        }
+        
         //if (sfxLightning && audioSource) audioSource.PlayOneShot(sfxLightning, 0.5f);
-        if (fmodSfx) fmodSfx.PlayLightning();
+        if (fmodSfx)
+        {
+            fmodSfx.PlayLightning();
+            _lastLightningTime = Time.time;
+        }
 
         // Aim light slightly from the sky
         transform.rotation = Quaternion.Euler(Random.Range(5, 20), Random.Range(20, 160), 0);
@@ -85,8 +104,20 @@ public class LightningFX : MonoBehaviour
         {
             float delay = Random.Range(thunderDelayRange.x, thunderDelayRange.y);
             yield return new WaitForSeconds(delay);
+            
+            // Rate limit thunder sounds
+            float timeSinceLastThunder = Time.time - _lastThunderTime;
+            if (timeSinceLastThunder < minThunderInterval)
+            {
+                yield return new WaitForSeconds(minThunderInterval - timeSinceLastThunder);
+            }
+            
             //audioSource.PlayOneShot(sfxThunder, 1f);
-            if (fmodSfx) fmodSfx.PlayThunder();
+            if (fmodSfx)
+            {
+                fmodSfx.PlayThunder();
+                _lastThunderTime = Time.time;
+            }
         }
     }
 

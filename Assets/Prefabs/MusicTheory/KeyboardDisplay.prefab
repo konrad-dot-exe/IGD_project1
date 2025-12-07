@@ -1,0 +1,65 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &270381365266535694
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 811198708404479107}
+  - component: {fileID: 8052669440245386339}
+  m_Layer: 5
+  m_Name: KeyboardDisplay
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &811198708404479107
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 270381365266535694}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 0.75, y: 0.75, z: 0.75}
+  m_ConstrainProportionsScale: 1
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: 0, y: 215}
+  m_SizeDelta: {x: 100, y: 100}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &8052669440245386339
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 270381365266535694}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6bd45b7316e28084f92ce8192b90ccd0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  keysParent: {fileID: 811198708404479107}
+  whiteKeyPrefab: {fileID: 8239563784168965039, guid: 96e68dc7e1404604aa0a1051a0f1aa76, type: 3}
+  blackKeyPrefab: {fileID: 6088311091034828268, guid: b31e5eb947e8ab6438178087762aada7, type: 3}
+  whiteWidth: 48
+  whiteHeight: 180
+  blackWidthRatio: 0.6
+  blackHeightRatio: 0.65
+  whiteSpacing: 2
+  blackHorizontalOffset: 1
+  containerHeight: 0
+  ignoreLayoutGroups: 0
+  nonFeaturedKeyOpacity: 0.3
+  canvasGroup: {fileID: 0}
+  displayRangeMinMidi: 43
+  displayRangeMaxMidi: 79

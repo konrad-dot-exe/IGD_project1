@@ -45,7 +45,8 @@ namespace Sonoria.Dictation
                     mode = "", // Will be set from campaign data
                     unlocked = (i == 0), // Only first node unlocked
                     levels = new List<bool>(6) { false, false, false, false, false, false },
-                    winsPerLevel = new List<int>(6) { 0, 0, 0, 0, 0, 0 }
+                    winsPerLevel = new List<int>(6) { 0, 0, 0, 0, 0, 0 },
+                    topScoresPerLevel = new List<int>(6) { 0, 0, 0, 0, 0, 0 }
                 };
 
                 save.nodes.Add(nodeData);
@@ -67,7 +68,8 @@ namespace Sonoria.Dictation
                     mode = "",
                     unlocked = false,
                     levels = new List<bool>(6) { false, false, false, false, false, false },
-                    winsPerLevel = new List<int>(6) { 0, 0, 0, 0, 0, 0 }
+                    winsPerLevel = new List<int>(6) { 0, 0, 0, 0, 0, 0 },
+                    topScoresPerLevel = new List<int>(6) { 0, 0, 0, 0, 0, 0 }
                 });
             }
 
@@ -82,6 +84,8 @@ namespace Sonoria.Dictation
                 nodeData.levels.Add(false);
             while (nodeData.winsPerLevel.Count < 6)
                 nodeData.winsPerLevel.Add(0);
+            while (nodeData.topScoresPerLevel.Count < 6)
+                nodeData.topScoresPerLevel.Add(0);
 
             return nodeData;
         }
@@ -168,6 +172,37 @@ namespace Sonoria.Dictation
 
             return -1; // All levels complete
         }
+
+        /// <summary>
+        /// Gets the top score for a specific level.
+        /// </summary>
+        public int GetTopScore(int nodeIndex, int levelIndex)
+        {
+            if (nodeIndex < 0 || nodeIndex >= nodes.Count)
+                return 0;
+
+            var nodeData = nodes[nodeIndex];
+            if (levelIndex < 0 || levelIndex >= nodeData.topScoresPerLevel.Count)
+                return 0;
+
+            return nodeData.topScoresPerLevel[levelIndex];
+        }
+
+        /// <summary>
+        /// Sets the top score for a specific level if the new score is higher.
+        /// </summary>
+        public void SetTopScore(int nodeIndex, int levelIndex, int score)
+        {
+            var nodeData = GetOrCreateNodeData(nodeIndex, "");
+            if (levelIndex >= 0 && levelIndex < nodeData.topScoresPerLevel.Count)
+            {
+                // Only update if new score is higher
+                if (score > nodeData.topScoresPerLevel[levelIndex])
+                {
+                    nodeData.topScoresPerLevel[levelIndex] = score;
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -187,6 +222,9 @@ namespace Sonoria.Dictation
 
         [Tooltip("Win count per level (runtime-only, optional for resume-in-level feature)")]
         public List<int> winsPerLevel = new List<int>(6);
+
+        [Tooltip("Top score achieved per level (persistent)")]
+        public List<int> topScoresPerLevel = new List<int>(6);
     }
 }
 

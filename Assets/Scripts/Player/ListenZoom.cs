@@ -44,7 +44,7 @@ namespace EarFPS
         void Awake()
         {
             if (!cam) cam = GetComponent<Camera>();
-            if (globalVolume && globalVolume.profile)
+            if (globalVolume != null && globalVolume.profile != null)
                 globalVolume.profile.TryGet(out vignette);
             if (!overlayRect && overlayGroup)
                 overlayRect = overlayGroup.GetComponent<RectTransform>();
@@ -61,10 +61,12 @@ namespace EarFPS
             float dur = listening ? zoomInTime : zoomOutTime;
             float t = 0f;
 
+            if (!cam) yield break;
+
             float f0 = cam.fieldOfView;
             float f1 = listening ? zoomFOV : normalFOV;
 
-            float v0 = (vignette != null) ? vignette.intensity.value : 0f;
+            float v0 = (vignette != null && globalVolume != null) ? vignette.intensity.value : 0f;
             float v1 = listening ? zoomVignette : normalVignette;
 
             float a0 = overlayGroup ? overlayGroup.alpha : 0f;
@@ -75,19 +77,25 @@ namespace EarFPS
 
             while (t < dur)
             {
+                // Check if objects are still valid (scene might be unloading)
+                if (!cam || (globalVolume == null && driveVignette)) break;
+
                 t += Time.unscaledDeltaTime;
                 float u = Mathf.Clamp01(t / dur);
 
                 cam.fieldOfView = Mathf.Lerp(f0, f1, u);
-                if (vignette && driveVignette) vignette.intensity.value = Mathf.Lerp(v0, v1, u);
+                if (vignette != null && globalVolume != null && driveVignette) 
+                    vignette.intensity.value = Mathf.Lerp(v0, v1, u);
                 if (overlayGroup) overlayGroup.alpha = Mathf.Lerp(a0, a1, u);
                 if (overlayRect) overlayRect.localScale = Vector3.Lerp(s0, s1, u);
 
                 yield return null;
             }
 
-            cam.fieldOfView = f1;
-            if (vignette && driveVignette) vignette.intensity.value = v1;
+            // Final set (only if objects still exist)
+            if (cam) cam.fieldOfView = f1;
+            if (vignette != null && globalVolume != null && driveVignette) 
+                vignette.intensity.value = v1;
             if (overlayGroup) overlayGroup.alpha = a1;
             if (overlayRect) overlayRect.localScale = s1;
             co = null;
@@ -100,7 +108,7 @@ namespace EarFPS
             cam.fieldOfView = on ? listenFov : normalFov;
 
 #if USING_URP
-            if (vignette && driveVignette)
+            if (vignette != null && globalVolume != null && driveVignette)
                 vignette.intensity.value = on ? listenVig : normalVig;
 #endif
 
@@ -113,7 +121,7 @@ namespace EarFPS
         
         public void Begin(bool on)
         {
-            // If this GO is disabled (e.g., during scene reload), don’t try to start a coroutine.
+            // If this GO is disabled (e.g., during scene reload), don't try to start a coroutine.
             if (!isActiveAndEnabled || !gameObject.activeInHierarchy)
             {
                 SetImmediate(on);
@@ -124,6 +132,14 @@ namespace EarFPS
             co = StartCoroutine(Tween(on));   // <-- was Animate(on)
         }
 
-        
+        void OnDestroy()
+        {
+            // Stop any running coroutines when component is destroyed
+            if (co != null)
+            {
+                StopCoroutine(co);
+                co = null;
+            }
+        }
     }
 }

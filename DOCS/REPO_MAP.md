@@ -49,12 +49,13 @@
 | Folder | Overview |
 | --- | --- |
 | `Audio/` | Handles music playback, sound effects, and integration with FMOD or MIDI systems. |
-| `Core/` | Fundamental game systems such as managers, utilities, and shared infrastructure. |
+| `Core/` | Fundamental game systems such as managers, utilities, and shared infrastructure (includes Melodic Dictation controller and campaign systems). |
+| `MusicTheory/` | Self-contained music theory kernel: keys, scales, chords, and analysis. Used by Chord Lab, Melodic Dictation, and other modules. |
 | `Enemies/` | Logic for adversarial elements or challenge generators within practice modes. |
 | `Environment/` | Controls environmental objects, scenery, or world interactions. |
 | `FX/` | Visual effect controllers and particle orchestration. |
 | `Player/` | Player avatar or user interaction handling, including input and progression. |
-| `UI/` | User interface behaviour scripts for menus, HUDs, and widgets. |
+| `UI/` | User interface behaviour scripts for menus, HUDs, and widgets (includes Chord Lab panel and other training UIs). |
 
 ## What Not to Read First
 

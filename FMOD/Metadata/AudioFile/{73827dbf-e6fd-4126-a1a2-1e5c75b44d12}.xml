@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objects serializationModel="Studio.02.03.00">
+	<object class="AudioFile" id="{73827dbf-e6fd-4126-a1a2-1e5c75b44d12}">
+		<property name="assetPath">
+			<value>SFX/15401__djgriffin__tibetan_bell.wav</value>
+		</property>
+		<property name="frequencyInKHz">
+			<value>44.0999985</value>
+		</property>
+		<property name="channelCount">
+			<value>2</value>
+		</property>
+		<property name="length">
+			<value>6</value>
+		</property>
+		<relationship name="masterAssetFolder">
+			<destination>{f2ebb59c-0df8-4353-8218-ef129e20ef4b}</destination>
+		</relationship>
+	</object>
+</objects>

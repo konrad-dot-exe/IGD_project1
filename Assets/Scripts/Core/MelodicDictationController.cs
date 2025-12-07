@@ -89,8 +89,8 @@ namespace EarFPS
         public int pointsReplay = -25;
         [Tooltip("Continuous drain per second while Listening (use negative).")]
         public float pointsPerSecondInput = -5f;
-        [Tooltip("Max wrong notes allowed per round before Game Over.")]
-        public int maxWrongPerRound = 3;
+        [Tooltip("Max wrong notes allowed per level before Game Over.")]
+        public int maxWrongPerLevel = 6;
 
         [Header("Melody Generation")]
         [Tooltip("Prevent the same melody from appearing in two consecutive rounds.")]
@@ -98,7 +98,10 @@ namespace EarFPS
 
         // Scoring state
         private int score = 0;
-        private int wrongGuessesThisRound = 0;
+        public int Score => score; // Public accessor for current score
+        private int wrongGuessesThisLevel = 0;  // Wrong guesses per level (not per round)
+        private int wrongNotePenaltiesThisRound = 0;  // Accumulated wrong note penalties (not applied until round completion)
+        private int replayPenaltiesThisRound = 0;     // Accumulated replay penalties (not applied until round completion)
 
         // Campaign mode state
         [Header("Campaign Mode")]
@@ -136,6 +139,24 @@ namespace EarFPS
         [SerializeField] float goPreExtAmpMul = 2.2f;     // violent amplitude multiplier
         [SerializeField] float goPreExtSpeedMul = 2.6f;     // violent speed multiplier
         [SerializeField] float goPreExtBaseMul = 1.12f;    // slight brightening
+
+        [Header("Candle Hitpoints")]
+        [Tooltip("Use candles as hitpoint indicators. On wrong guess, extinguish 2 random lit candles.")]
+        [SerializeField] bool useCandlesAsHitpoints = true;
+        [Tooltip("Duration of violent flicker before extinguishing on wrong guess.")]
+        [SerializeField] float wrongGuessFlickerDuration = 0.5f;
+        [Tooltip("How much of the flicker duration to wait before starting extinguish (0 = wait full duration, 1 = start immediately).")]
+        [Range(0f, 1f)]
+        [SerializeField] float wrongGuessFlickerOverlap = 0.4f;
+        [Tooltip("Amplitude multiplier for violent flicker on wrong guess.")]
+        [SerializeField] float wrongGuessFlickerAmpMul = 2.2f;
+        [Tooltip("Speed multiplier for violent flicker on wrong guess.")]
+        [SerializeField] float wrongGuessFlickerSpeedMul = 2.6f;
+        [Tooltip("Base intensity multiplier for violent flicker on wrong guess.")]
+        [SerializeField] float wrongGuessFlickerBaseMul = 1.12f;
+        [Tooltip("Fade duration when extinguishing candles on wrong guess.")]
+        [SerializeField] float wrongGuessExtinguishFade = 0.30f;
+
         [Header("Game Over • Blackout timing")]
 
 
@@ -292,6 +313,27 @@ namespace EarFPS
             // Reset drone started flag when a new level is configured
             _droneStartedForLevel = false;
             
+            // Reset session stats for new level
+            roundsCompleted = 0;
+            score = 0;
+            runStartTime = Time.time;
+            
+            // Reset wrong guesses counter for new level
+            wrongGuessesThisLevel = 0;
+            
+            // Re-ignite all candles when starting a new level
+            if (useCandlesAsHitpoints)
+            {
+                foreach (var candle in candles)
+                {
+                    if (candle != null && !candle.IsLit)
+                    {
+                        candle.Ignite();
+                    }
+                }
+                if (log) Debug.Log("[Dictation] All candles re-lit at level start");
+            }
+            
             if (log) Debug.Log($"[Dictation] Campaign mode enabled: {winsRequired} wins required");
         }
 
@@ -340,6 +382,7 @@ namespace EarFPS
             }
 
             // Point deduction timer (only while Listening and time limit not expired)
+            // Accumulate time penalty but don't apply until round completion
             if (state == State.Listening && roundTimeLimitRemainingSec > 0f)
             {
                 float drainRate = Mathf.Abs(pointsPerSecondInput);
@@ -348,15 +391,8 @@ namespace EarFPS
                 float dt = Time.deltaTime;
                 roundTimeRemainingSec = Mathf.Max(0f, roundTimeRemainingSec - dt);
 
-                // Accumulate drain and apply in whole-point steps
+                // Accumulate drain penalty (will be applied when round completes)
                 drainAccumulator += drainRate * dt; // positive magnitude
-                int whole = Mathf.FloorToInt(drainAccumulator);
-                if (whole > 0)
-                {
-                    score -= whole;
-                    drainAccumulator -= whole;
-                    UpdateScoreUI();
-                }
 
                 // Note: roundTimeRemainingSec check removed - time limit is now the only expiration condition
             }
@@ -399,9 +435,26 @@ namespace EarFPS
 
                 if (inputIndex >= melody.Count)
                 {
-                    int gain = Mathf.Max(0, pointsPerNote) * melody.Count;
-                    score += gain;
+                    // Calculate gross gain (points per note * melody length)
+                    int grossGain = Mathf.Max(0, pointsPerNote) * melody.Count;
+                    
+                    // Calculate time penalty (convert accumulated drain to whole points)
+                    int timePenalty = Mathf.FloorToInt(drainAccumulator);
+                    
+                    // Calculate total penalties (time + wrong notes + replays)
+                    int totalPenalties = timePenalty + wrongNotePenaltiesThisRound + replayPenaltiesThisRound;
+                    
+                    // Calculate net gain (gross gain minus all penalties, clamped to 0 minimum)
+                    int netGain = Mathf.Max(0, grossGain - totalPenalties);
+                    
+                    // Apply net gain to score
+                    score += netGain;
                     roundsCompleted++;
+                    
+                    // Reset accumulators after applying penalties
+                    drainAccumulator = 0f;
+                    wrongNotePenaltiesThisRound = 0;
+                    replayPenaltiesThisRound = 0;
                     
                     // Store the completed melody to prevent duplicates in the next round
                     if (preventDuplicateMelodies)
@@ -434,7 +487,7 @@ namespace EarFPS
                     UpdateScoreUI();
                     //PlaySfx(sfxWin);
                     if (fmodSfx) fmodSfx.PlayWin();
-                    ShowMessage($"Great! +{gain}", messageWinColor);
+                    ShowMessage($"Correct! +{netGain}", messageWinColor);
 
                     state = State.Idle;
                     StartCoroutine(WinSequence());  // <-- was WinThenNextRound()
@@ -442,15 +495,23 @@ namespace EarFPS
             }
             else
             {
-                score += pointsWrongNote;
+                // Track wrong note penalty (don't apply until round completion)
+                wrongNotePenaltiesThisRound += Mathf.Abs(pointsWrongNote); // Accumulate as positive value
                 UpdateScoreUI();
                 //PlaySfx(sfxWrong);
                 //if (fmodSfx) fmodSfx.PlayWrong();
-                ShowMessage($"Wrong note! {pointsWrongNote}", messageWrongColor);
+                ShowMessage($"Wrong! {pointsWrongNote}", messageWrongColor);
                 if (lightning) lightning.Strike(1);   // 0=single, 1=double flicker
 
-                wrongGuessesThisRound++;
-                if (wrongGuessesThisRound >= Mathf.Max(1, maxWrongPerRound))
+                wrongGuessesThisLevel++;
+                
+                // Extinguish candles on wrong guess if enabled
+                if (useCandlesAsHitpoints)
+                {
+                    ExtinguishCandlesOnWrongGuess();
+                }
+
+                if (wrongGuessesThisLevel >= Mathf.Max(1, maxWrongPerLevel))
                 {
                     GameOver();
                     return;
@@ -483,6 +544,24 @@ namespace EarFPS
             // Reinitialize environment if game over occurred (candles extinguished, drone stopped)
             if (_gameOverOccurred)
             {
+                // Reset session stats when restarting after game over
+                roundsCompleted = 0;
+                score = 0;
+                runStartTime = Time.time;
+                wrongGuessesThisLevel = 0; // Reset wrong guesses counter when restarting level
+                UpdateScoreUI(); // Update UI to reflect reset score
+                
+                // Reset campaign win counter when restarting after game over
+                if (isCampaignMode)
+                {
+                    var campaignService = FindFirstObjectByType<Sonoria.Dictation.CampaignService>();
+                    if (campaignService != null)
+                    {
+                        campaignService.ResetWinsThisLevel();
+                        if (log) Debug.Log("[Dictation] Reset campaign win counter after game over");
+                    }
+                }
+                
                 ReinitializeEnvironment();
                 _gameOverOccurred = false; // Reset flag after reinitialization
                 _droneStartedForLevel = true; // Mark drone as started after reinitialization
@@ -503,7 +582,12 @@ namespace EarFPS
             inputIndex = 0;
             
             if (pianoUI != null)
+            {
                 pianoUI.ShowImmediate();
+                // Immediately lock the keyboard so it appears at faded opacity (prevents flash of full opacity)
+                // Use 0f fade time to make it instant
+                pianoUI.LockInput(true, fadeTime: 0f);
+            }
             
             // Seed & generator config
             if (melodyGen != null)
@@ -513,8 +597,12 @@ namespace EarFPS
                 if (log) Debug.Log($"[Dictation] New random seed set: {melodyGen.Seed}");
             }
 
-            wrongGuessesThisRound = 0;
+            // Note: wrongGuessesThisLevel is NOT reset here - it persists across rounds within the same level
             drainAccumulator = 0f;
+            wrongNotePenaltiesThisRound = 0;
+            replayPenaltiesThisRound = 0;
+
+            // Candles are NOT re-lit at round start - they persist across rounds within the same level
 
             // Reset time limit timer (will start when Listening state begins)
             roundTimeLimitRemainingSec = roundTimeLimitSec;
@@ -561,7 +649,8 @@ namespace EarFPS
                 return;
             }
             
-            score += pointsReplay;
+            // Track replay penalty (don't apply until round completion)
+            replayPenaltiesThisRound += Mathf.Abs(pointsReplay); // Accumulate as positive value
             UpdateScoreUI();
             ReplayMelody();
         }
@@ -661,11 +750,20 @@ namespace EarFPS
             {
                 if (log) Debug.Log("[Dictation] Level complete.");
                 
+                var campaignService = FindFirstObjectByType<Sonoria.Dictation.CampaignService>();
+                
+                // Check if all levels in the current node are complete
+                bool allLevelsComplete = false;
+                if (campaignService != null)
+                {
+                    int nextLevel = campaignService.GetCurrentNodeNextLevel();
+                    allLevelsComplete = (nextLevel < 0); // -1 means all levels complete
+                }
+                
                 // Check if a new node was unlocked
                 if (newlyUnlockedNodeIndex >= 0 && unlockAnnouncement != null)
                 {
                     // Get the mode name and ScaleMode enum for the newly unlocked node
-                    var campaignService = FindFirstObjectByType<Sonoria.Dictation.CampaignService>();
                     if (campaignService != null)
                     {
                         string modeName = campaignService.GetNodeModeName(newlyUnlockedNodeIndex);
@@ -694,7 +792,39 @@ namespace EarFPS
                     }
                 }
                 
-                // No unlock or unlock announcement not available - show end screen directly
+                // Check if all levels in current node are complete (show completion announcement)
+                if (allLevelsComplete && unlockAnnouncement != null && campaignService != null)
+                {
+                    int currentNodeIndex = campaignService.CurrentNodeIndex;
+                    if (currentNodeIndex >= 0)
+                    {
+                        string modeName = campaignService.GetNodeModeName(currentNodeIndex);
+                        EarFPS.ScaleMode mode = campaignService.GetNodeMode(currentNodeIndex);
+                        
+                        if (!string.IsNullOrEmpty(modeName))
+                        {
+                            if (log) Debug.Log($"[Dictation] All levels in node {currentNodeIndex} ({modeName}) are complete. Showing completion announcement.");
+                            
+                            // Show completion announcement with keyboard display, then show end screen when Continue is clicked
+                            unlockAnnouncement.ShowCompletion(modeName, mode, () =>
+                            {
+                                // After completion announcement is dismissed, show end screen
+                                if (endScreen != null)
+                                {
+                                    endScreen.ShowDictation(score, roundsCompleted, Time.time - runStartTime, "Level Complete");
+                                }
+                                // Reset flags
+                                levelJustCompleted = false;
+                                newlyUnlockedNodeIndex = -1;
+                            });
+                            
+                            // Don't continue - completion announcement callback will handle showing end screen
+                            yield break;
+                        }
+                    }
+                }
+                
+                // No unlock/completion or unlock announcement not available - show end screen directly
                 if (log) Debug.Log("[Dictation] Showing endscreen.");
                 levelJustCompleted = false; // Reset flag
                 newlyUnlockedNodeIndex = -1;
@@ -931,16 +1061,17 @@ namespace EarFPS
         // ---------------- Game Over ----------------
         private void GameOver()
         {
+            // Prevent multiple calls - if game over already occurred, return early
+            if (_gameOverOccurred) return;
+            _gameOverOccurred = true;
+            
             if (log) Debug.Log("[Dictation] GAME OVER");
             state = State.Idle;
             if (playingCo != null) StopCoroutine(playingCo);
 
             if (dronePlayer != null) dronePlayer.Stop();
 
-            // Mark that game over occurred (needed for environment reinitialization on retry)
-            _gameOverOccurred = true;
-
-            ShowMessage("Game Over", messageWrongColor);
+            // ShowMessage("Game Over", messageWrongColor);
             //PlaySfx(sfxGameOver);
             if (fmodSfx) fmodSfx.PlayGameOver();
             MainMenuController.SetDictationHighScore(score);
@@ -1131,9 +1262,13 @@ namespace EarFPS
                 foreach (var c in candles)
                 {
                     if (c == null) continue;
-                    float delay = Random.Range(0f, goExtinguishSpread);
-                    maxDelay = Mathf.Max(maxDelay, delay);
-                    c.Extinguish(delay, goExtinguishFade);
+                    // Only extinguish if still lit (in case candles were used as hitpoints)
+                    if (c.IsLit)
+                    {
+                        float delay = Random.Range(0f, goExtinguishSpread);
+                        maxDelay = Mathf.Max(maxDelay, delay);
+                        c.Extinguish(delay, goExtinguishFade);
+                    }
                 }
                 yield return new WaitForSeconds(maxDelay + goExtinguishFade + goPostExtinguishPause);
             }
@@ -1146,6 +1281,78 @@ namespace EarFPS
         }
 
         // ---------------- Environment Reinitialization ----------------
+        /// <summary>
+        /// Gets a list of all currently lit candles.
+        /// </summary>
+        private List<CandleFlicker> GetLitCandles()
+        {
+            List<CandleFlicker> litCandles = new List<CandleFlicker>();
+            foreach (var candle in candles)
+            {
+                if (candle != null && candle.IsLit)
+                {
+                    litCandles.Add(candle);
+                }
+            }
+            return litCandles;
+        }
+
+        /// <summary>
+        /// Extinguishes 2 random lit candles on wrong guess (if enabled).
+        /// Uses violent flicker animation before extinguishing.
+        /// </summary>
+        private void ExtinguishCandlesOnWrongGuess()
+        {
+            List<CandleFlicker> litCandles = GetLitCandles();
+            
+            if (litCandles.Count == 0)
+            {
+                if (log) Debug.LogWarning("[Dictation] No lit candles to extinguish on wrong guess!");
+                return;
+            }
+
+            // Determine how many candles to extinguish (1 per wrong guess, or remaining if less than 1)
+            int candlesToExtinguish = Mathf.Min(1, litCandles.Count);
+
+            // Randomly select candles to extinguish
+            List<CandleFlicker> candlesToExt = new List<CandleFlicker>();
+            for (int i = 0; i < candlesToExtinguish; i++)
+            {
+                int randomIndex = Random.Range(0, litCandles.Count);
+                candlesToExt.Add(litCandles[randomIndex]);
+                litCandles.RemoveAt(randomIndex); // Remove to avoid selecting same candle twice
+            }
+
+            // Start violent flicker and schedule extinguishing for each selected candle
+            foreach (var candle in candlesToExt)
+            {
+                if (candle != null && candle.IsLit)
+                {
+                    // Start violent flicker immediately (synchronized with lightning)
+                    candle.ViolentFlicker(wrongGuessFlickerDuration, wrongGuessFlickerAmpMul, wrongGuessFlickerSpeedMul, wrongGuessFlickerBaseMul);
+                    
+                    // Schedule extinguishing after part of flicker duration (overlap for earlier extinguish)
+                    float extinguishDelay = wrongGuessFlickerDuration * wrongGuessFlickerOverlap;
+                    StartCoroutine(ExtinguishCandleAfterFlicker(candle, extinguishDelay, wrongGuessExtinguishFade));
+                }
+            }
+
+            if (log) Debug.Log($"[Dictation] Extinguishing {candlesToExt.Count} candle(s) on wrong guess. {GetLitCandles().Count - candlesToExtinguish} remaining.");
+        }
+
+        /// <summary>
+        /// Coroutine that waits for flicker duration, then extinguishes the candle.
+        /// </summary>
+        private IEnumerator ExtinguishCandleAfterFlicker(CandleFlicker candle, float flickerDuration, float fadeDuration)
+        {
+            yield return new WaitForSeconds(flickerDuration);
+            
+            if (candle != null && candle.IsLit)
+            {
+                candle.Extinguish(0f, fadeDuration);
+            }
+        }
+
         /// <summary>
         /// Reinitializes the environment after a game over.
         /// Reignites all candles and restarts the drone sound.

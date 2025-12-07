@@ -104,14 +104,46 @@ namespace EarFPS
                 titleText.text = $"Module Unlocked: {modeName}";
             }
 
-            // Hide keyboard UI when unlock announcement appears
+            ShowAnnouncementInternal(modeName, mode);
+        }
+
+        /// <summary>
+        /// Shows a mode completion announcement (similar to unlock announcement).
+        /// </summary>
+        /// <param name="modeName">Name of the completed mode (e.g., "Mixolydian")</param>
+        /// <param name="mode">ScaleMode enum for the completed mode (used for keyboard display)</param>
+        /// <param name="onContinue">Callback invoked when Continue button is clicked</param>
+        public void ShowCompletion(string modeName, ScaleMode? mode, System.Action onContinue)
+        {
+            // Ensure initialization
+            Initialize();
+
+            // Store callback
+            onContinueCallback = onContinue;
+
+            // Update title text for completion
+            if (titleText != null)
+            {
+                titleText.text = $"Mode Complete: {modeName}";
+            }
+
+            ShowAnnouncementInternal(modeName, mode);
+        }
+
+        /// <summary>
+        /// Internal method to show the announcement UI (shared by ShowUnlock and ShowCompletion).
+        /// </summary>
+        private void ShowAnnouncementInternal(string modeName, ScaleMode? mode)
+        {
+
+            // Hide keyboard UI when announcement appears
             var keyboardUI = FindFirstObjectByType<PianoKeyboardUI>();
             if (keyboardUI != null)
             {
                 keyboardUI.HideImmediate();
             }
 
-            // Stop drone sound when unlock announcement appears
+            // Stop drone sound when announcement appears
             var dronePlayer = FindFirstObjectByType<DronePlayer>();
             if (dronePlayer != null)
             {
@@ -145,7 +177,7 @@ namespace EarFPS
             }
             gameObject.SetActive(true);
 
-            // Show keyboard display for the unlocked mode (AFTER parent is active so coroutine can run)
+            // Show keyboard display for the mode (AFTER parent is active so coroutine can run)
             if (mode.HasValue && keyboardDisplay != null)
             {
                 // Show keyboard immediately (C4-C5, MIDI 60-72)

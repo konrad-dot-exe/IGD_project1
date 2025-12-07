@@ -20,8 +20,6 @@ namespace EarFPS
         [SerializeField] TextMeshProUGUI statScore;
         [SerializeField] TextMeshProUGUI statTime;
         [SerializeField] TextMeshProUGUI statAccuracy;
-        [SerializeField] TextMeshProUGUI statDestroyed;
-        [SerializeField] TextMeshProUGUI statBestStreak;
 
         [Header("Dictation Refs (Melodic Dictation)")]
         [SerializeField] TextMeshProUGUI dictScore;
@@ -113,8 +111,6 @@ namespace EarFPS
             SetActive(statScore, true);      statScore.text      = $"Score: <b>{s.score:n0}</b>";
             SetActive(statTime, true);       statTime.text       = $"Time: <b>{FormatTime(s.timeSeconds)}</b>";
             SetActive(statAccuracy, true);   statAccuracy.text   = $"Accuracy: <b>{(s.total > 0 ? Mathf.RoundToInt(100f * s.correct / s.total) : 0)}%</b>";
-            SetActive(statDestroyed, true);  statDestroyed.text  = $"Destroyed: <b>{s.enemiesDestroyed}</b>";
-            SetActive(statBestStreak, true); statBestStreak.text = $"Best Streak: <b>{s.bestStreak}</b>";
 
             // Hide Dictation refs
             SetActive(dictScore, false);
@@ -145,12 +141,10 @@ namespace EarFPS
                 SetActive(statScore, false);
                 SetActive(statTime, false);
                 SetActive(statAccuracy, false);
-                SetActive(statDestroyed, false);
-                SetActive(statBestStreak, false);
 
                 // Show Dictation refs
-                SetActive(dictScore, true);  dictScore.text  = $"Score: <b>{score:n0}</b>";
-                SetActive(dictTime,  true);  dictTime.text   = $"Time: <b>{FormatTime(timeSeconds)}</b>";
+                SetActive(dictScore, true);  dictScore.text  = $"Level Score: <b>{score:n0}</b>";
+                SetActive(dictTime,  true);  dictTime.text   = $"Level Time: <b>{FormatTime(timeSeconds)}</b>";
                 SetActive(dictRounds,true);  dictRounds.text = $"Rounds: <b>{roundsCompleted}</b>";
 
                 // Hide campaign buttons, show normal buttons
@@ -175,13 +169,11 @@ namespace EarFPS
             SetActive(statScore, false);
             SetActive(statTime, false);
             SetActive(statAccuracy, false);
-            SetActive(statDestroyed, false);
-            SetActive(statBestStreak, false);
 
             // Show Dictation refs
-            SetActive(dictScore, true);  dictScore.text  = $"Score: <b>{score:n0}</b>";
-            SetActive(dictTime,  true);  dictTime.text   = $"Time: <b>{FormatTime(timeSeconds)}</b>";
-            SetActive(dictRounds,true);  dictRounds.text = $"Rounds: <b>{roundsCompleted}</b>";
+            SetActive(dictScore, true);  if (dictScore != null) dictScore.text  = $"Score: <b>{score:n0}</b>";
+            SetActive(dictTime,  true);  if (dictTime != null) dictTime.text   = $"Time: <b>{FormatTime(timeSeconds)}</b>";
+            SetActive(dictRounds,true);  if (dictRounds != null) dictRounds.text = $"Rounds: <b>{roundsCompleted}</b>";
 
             // Check if this is a game over (player failed) or level completion (player succeeded)
             bool isGameOver = !string.IsNullOrEmpty(titleOverride) && titleOverride.ToLower().Contains("game over");
@@ -204,6 +196,13 @@ namespace EarFPS
             else
             {
                 // Level Complete: Player succeeded - can continue to next level or go back to map
+                // Play level complete sound
+                var fmodSfx = FindFirstObjectByType<FmodSfxPlayer>();
+                if (fmodSfx != null)
+                {
+                    fmodSfx.PlayLevelComplete();
+                }
+                
                 // Hide Retry button (no need to retry)
                 SetActive(btnRetry, false);
                 SetActive(btnDashboard, false);
@@ -269,6 +268,9 @@ namespace EarFPS
         public void OnClickDashboard()
         {
             Hide();
+            // Explicitly unlock cursor before loading MainMenu (don't restore previous locked state)
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
             if (!string.IsNullOrEmpty(dashboardSceneName))
                 SceneManager.LoadScene(dashboardSceneName, LoadSceneMode.Single);
         }
@@ -289,34 +291,53 @@ namespace EarFPS
         {
             Hide();
             
-            // Show level picker for current node
-            if (campaignLevelPicker != null && CampaignService.Instance != null)
+            if (CampaignService.Instance != null)
             {
-                int currentNodeIndex = CampaignService.Instance.CurrentNodeIndex;
-                if (currentNodeIndex >= 0)
+                // Check if all levels in the current node are complete
+                int nextLevel = CampaignService.Instance.GetCurrentNodeNextLevel();
+                bool allLevelsComplete = (nextLevel < 0); // -1 means all levels complete
+                
+                if (allLevelsComplete)
                 {
-                    campaignLevelPicker.ShowForNode(currentNodeIndex);
-                }
-                else
-                {
-                    Debug.LogWarning("[EndScreenController] No current node index available. Falling back to map view.");
-                    // Fallback to map view
+                    // All levels complete - navigate to campaign map
                     if (campaignMapView != null)
                     {
                         campaignMapView.Show();
+                    }
+                    else
+                    {
+                        Debug.LogWarning("[EndScreenController] All levels complete but CampaignMapView is not assigned! Cannot navigate to map.");
+                    }
+                }
+                else
+                {
+                    // Not all levels complete - show level picker for current node
+                    int currentNodeIndex = CampaignService.Instance.CurrentNodeIndex;
+                    if (currentNodeIndex >= 0 && campaignLevelPicker != null)
+                    {
+                        campaignLevelPicker.ShowForNode(currentNodeIndex);
+                    }
+                    else
+                    {
+                        Debug.LogWarning("[EndScreenController] No current node index available or level picker not assigned. Falling back to map view.");
+                        // Fallback to map view
+                        if (campaignMapView != null)
+                        {
+                            campaignMapView.Show();
+                        }
                     }
                 }
             }
             else
             {
-                // Fallback to map view if level picker is not available
+                // Fallback to map view if CampaignService is not available
                 if (campaignMapView != null)
                 {
                     campaignMapView.Show();
                 }
                 else
                 {
-                    Debug.LogWarning("[EndScreenController] Neither CampaignLevelPicker nor CampaignMapView is assigned! Cannot navigate back.");
+                    Debug.LogWarning("[EndScreenController] CampaignService not available and CampaignMapView is not assigned! Cannot navigate back.");
                 }
             }
         }

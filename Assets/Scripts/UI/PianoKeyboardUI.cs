@@ -3,6 +3,7 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 using EarFPS;
+using Sonoria.MusicTheory;
 
 public class PianoKeyboardUI : MonoBehaviour
 {
@@ -64,8 +65,14 @@ public class PianoKeyboardUI : MonoBehaviour
             if (!canvasGroup) canvasGroup = go.AddComponent<CanvasGroup>();
         }
 
-        // Start unlocked
-        ApplyLockVisual(false, immediate: true);
+        // Start hidden - will be shown when ShowImmediate() is called
+        if (canvasGroup)
+        {
+            canvasGroup.alpha = 0f;
+            canvasGroup.interactable = false;
+            canvasGroup.blocksRaycasts = false;
+        }
+        inputLocked = true; // Start locked until explicitly shown
 
         // Apply featured notes opacity (in case SetFeaturedNotes was called before keyboard was built)
         UpdateKeyOpacityForFeaturedNotes();
@@ -344,17 +351,10 @@ public class PianoKeyboardUI : MonoBehaviour
         if (!anyAllowed)
             return result;
 
-        // Get pitch-class array for the mode (same mapping as MelodyGenerator)
-        int[] degreeOrder = mode switch
-        {
-            EarFPS.ScaleMode.Ionian     => new int[] { 0, 2, 4, 5, 7, 9, 11 },
-            EarFPS.ScaleMode.Dorian     => new int[] { 0, 2, 3, 5, 7, 9, 10 },
-            EarFPS.ScaleMode.Phrygian   => new int[] { 0, 1, 3, 5, 7, 8, 10 },
-            EarFPS.ScaleMode.Lydian     => new int[] { 0, 2, 4, 6, 7, 9, 11 },
-            EarFPS.ScaleMode.Mixolydian => new int[] { 0, 2, 4, 5, 7, 9, 10 },
-            EarFPS.ScaleMode.Aeolian    => new int[] { 0, 2, 3, 5, 7, 8, 10 },
-            _ => new int[] { 0, 2, 4, 5, 7, 9, 11 } // Ionian fallback
-        };
+        // Get pitch-class array for the mode using TheoryScale (centralized logic)
+        Sonoria.MusicTheory.ScaleMode theoryMode = TheoryKeyUtils.FromLegacyMode(mode);
+        TheoryKey key = new TheoryKey(theoryMode);
+        int[] degreeOrder = TheoryScale.GetDiatonicPitchClasses(key);
 
         // For each allowed degree (1-7), collect all MIDI notes in register with matching pitch-class
         for (int degree = 1; degree <= 7; degree++)

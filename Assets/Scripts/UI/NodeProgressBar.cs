@@ -30,7 +30,7 @@ namespace EarFPS
         [SerializeField] float height = 600f;
         
         [Tooltip("Fill color for the progress bar")]
-        [SerializeField] Color fillColor = Color.black;
+        [SerializeField] Color fillColor = new Color(53f / 255f, 53f / 255f, 53f / 255f, 1f); // #353535
         
         [Tooltip("Animation duration in seconds when progress changes")]
         [SerializeField] float animationDuration = 1.0f;

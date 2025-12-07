@@ -48,9 +48,14 @@ Implemented a campaign system for the Melodic Dictation module. Players progress
 - Serializable save data (JSON persistence)
 - Structure:
   - `version`: Save file version
-  - `nodes`: List of NodeSaveData (unlock state, level completion, win counts)
+  - `nodes`: List of NodeSaveData (unlock state, level completion, win counts, top scores)
   - `lastNodeIndex`: Last played node index
   - `lastLevelIndex`: Last played level index
+- NodeSaveData fields:
+  - `unlocked`: Whether node is unlocked
+  - `levels`: Completion flags for each level (6 levels)
+  - `winsPerLevel`: Win count per level (runtime tracking)
+  - `topScoresPerLevel`: Top score achieved per level (persistent)
 - Methods:
   - `CreateDefault(int nodeCount)`: Creates default save (first node unlocked)
   - `IsNodeUnlocked(int nodeIndex)`: Checks if node is unlocked
@@ -59,6 +64,8 @@ Implemented a campaign system for the Melodic Dictation module. Players progress
   - `GetCompletedLevelCount(int nodeIndex)`: Returns completed level count
   - `UnlockNode(int nodeIndex)`: Unlocks a node
   - `GetNextIncompleteLevelIndex(int nodeIndex)`: Returns next incomplete level index
+  - `GetTopScore(int nodeIndex, int levelIndex)`: Returns top score for a level
+  - `SetTopScore(int nodeIndex, int levelIndex, int score)`: Updates top score if higher
 
 ---
 
@@ -71,17 +78,22 @@ Implemented a campaign system for the Melodic Dictation module. Players progress
   - Save/load: JSON persistence to `Application.persistentDataPath`
   - Progression: Tracks current node/level, unlocks next node after 3 completions
   - Level management: Starts levels, validates unlocks, enforces order
+  - Top score tracking: Updates and persists top scores per level
+  - Camera intro sequence: Plays camera animation before level initialization
   - Debug methods: Reset progress, unlock all, auto-complete levels
 - Key Methods:
-  - `StartFromMap(int nodeIndex, int levelIndex)`: Starts a level from the map
-  - `RecordLevelWin()`: Records a win, checks completion, unlocks nodes
+  - `StartFromMap(int nodeIndex, int levelIndex)`: Starts a level from the map (coroutine)
+    - Plays camera intro sequence (rotates from sky view to table view)
+    - Displays level intro message during camera rotation
+    - Waits for intro completion before initializing level
+  - `RecordLevelWin()`: Records a win, checks completion, unlocks nodes, updates top score
   - `StartNextLevel()`: Starts the next level in the current node
   - `IsNodeUnlocked(int nodeIndex)`: Checks unlock status
-  - `GetCurrentNodeNextLevel()`: Returns next incomplete level index
+  - `GetCurrentNodeNextLevel()`: Returns next incomplete level index (-1 if all complete)
 - State Management:
   - Tracks `currentNodeIndex`, `currentLevelIndex`, `winsThisLevel`
   - Persists across scenes with `DontDestroyOnLoad`
-  - Auto-saves on progression changes
+  - Auto-saves on progression changes and top score updates
 
 ---
 
@@ -127,19 +139,27 @@ Implemented a campaign system for the Melodic Dictation module. Players progress
   - `winsRequired`: Rounds required for current level
   - `winsThisLevel`: Current win count
   - `levelJustCompleted`: Flag for endscreen display
+  - `wrongGuessesThisLevel`: Wrong guesses per level (6 max, persists across rounds)
+  - `maxWrongPerLevel`: Maximum wrong guesses before game over (default: 6)
 - Methods:
-  - `SetWinsRequiredForCampaign(int winsRequired)`: Sets wins required
+  - `SetWinsRequiredForCampaign(int winsRequired)`: Sets wins required, resets stats, re-ignites candles
   - `DisableCampaignMode()`: Disables campaign mode
   - `StartRound()`: Public method for external calls
+  - `Score`: Public property to access current score
 - Win logic:
   - Increments `winsThisLevel` on round completion
   - Calls `CampaignService.RecordLevelWin()` when `winsThisLevel >= winsRequired`
   - Shows endscreen when level completes
   - Disables auto-advance in campaign mode
+- Stats reset:
+  - `score`, `roundsCompleted`, `runStartTime` reset when starting new level
+  - `wrongGuessesThisLevel` resets when starting new level or restarting after game over
+  - All stats reset when restarting after game over
 - Start logic:
   - Checks for campaign map visibility before starting
   - Waits for level selection if map is visible
   - Handles campaign mode initialization
+  - Re-ignites candles when starting new level
 
 ---
 
@@ -188,11 +208,16 @@ Implemented a campaign system for the Melodic Dictation module. Players progress
 - Campaign mode support:
   - `ShowCampaign(int score, int roundsCompleted, float timeSeconds)`: Shows campaign endscreen
   - "Continue" button: Starts next level (hidden when all levels complete)
-  - "Back to Map" button: Returns to campaign map
+  - "Back to Map" button: Returns to campaign map or level picker based on completion status
   - Button state: Continue button only shown if next level exists
+  - Level complete sound: Plays when level completes (not on game over)
+- Navigation logic:
+  - When all levels in node are complete: "Back to Map" navigates to campaign map
+  - When levels remain: "Back to Map" navigates to level picker for current node
 - Integration:
   - Auto-detects campaign mode
   - Shows appropriate buttons based on context
+  - Displays "Level Score" and "Level Time" (per-level stats)
 
 #### CampaignDebugPanel (`Assets/Scripts/UI/CampaignDebugPanel.cs`)
 
@@ -204,9 +229,31 @@ Implemented a campaign system for the Melodic Dictation module. Players progress
 - Settings:
   - `devOnly`: Show only in development builds
 
+#### UnlockAnnouncementController Updates (`Assets/Scripts/UI/UnlockAnnouncementController.cs`)
+
+- Extended to support mode completion announcements
+- Methods:
+  - `ShowCompletion(string modeName, ScaleMode? mode, System.Action onContinue)`: Shows "Mode Complete: [Mode Name]" announcement
+  - Displays completion message before end screen when all levels in a node are finished
+  - Uses same visual style as unlock announcements
+
 ---
 
 ### 6. Additional Features
+
+#### Top Score Tracking
+
+- Persistent top score per level (stored in `CampaignSave`)
+- Updated automatically when level completes if current score is higher
+- Keyed by `nodeIndex + levelIndex` for per-level tracking
+- Ready for future UI display (not yet shown in UI)
+
+#### Mode Completion Announcement
+
+- Shows "Mode Complete" announcement when all 6 levels in a node are completed
+- Uses `UnlockAnnouncementController` with completion variant
+- Displays before end screen (similar to unlock announcement flow)
+- Keyboard display shows the completed mode
 
 #### Duplicate Melody Prevention
 
@@ -222,6 +269,7 @@ Implemented a campaign system for the Melodic Dictation module. Players progress
 - Implementation:
   - `CardController.cs`: Plays one-shot sound on collision with table
   - `hasPlayedSlapSound` flag prevents multiple plays
+  - Debouncing prevents too many simultaneous sounds (max 1 per 50ms)
 
 #### Keyboard Opacity Feature
 
@@ -230,6 +278,28 @@ Implemented a campaign system for the Melodic Dictation module. Players progress
   - `PianoKeyboardUI.SetFeaturedNotes()`: Sets featured notes based on difficulty profile
   - `PianoKeyUI._baseOpacity`: Preserves opacity when keys are highlighted
   - Configurable opacity (default: 0.3 for non-featured keys)
+
+#### Camera Intro Sequence
+
+- Visual polish when starting a level from campaign map
+- Implementation:
+  - `CameraIntro.cs`: Manages camera rotation animation
+  - Camera starts at -65° X rotation (pointing at sky)
+  - Rotates down to 38° X rotation (pointing at table) over 1 second
+  - Level intro message displays during rotation (e.g., "Mixolydian — Level 4")
+  - Message fades in quickly, then fades out over rotation duration
+  - Integrated into `CampaignService.StartFromMap()` coroutine
+  - Plays before level initialization (candles, cards, etc.)
+
+#### Camera Ambient Motion
+
+- Subtle camera movement for visual polish
+- Implementation:
+  - `CameraAmbientMotion.cs`: Adds drift and breathing motion
+  - Y-axis rotation drift (oscillating, 1-2° range)
+  - Soft vertical "breathing" motion
+  - Always active by default, toggleable
+  - Automatically waits for camera intro to complete before initializing
 
 ---
 
@@ -241,12 +311,15 @@ Implemented a campaign system for the Melodic Dictation module. Players progress
 2. CampaignMapView displays → Shows unlocked/locked nodes
 3. Player clicks unlocked node → CampaignLevelPicker shows 6 levels
 4. Player selects level → CampaignService.StartFromMap() called
-5. Profile applied → DifficultyProfileApplier applies profile with mode override
-6. Controller configured → MelodicDictationController set to campaign mode
-7. Round starts → Player plays rounds until `winsRequired` reached
-8. Level complete → CampaignService.RecordLevelWin() called
-9. Endscreen shown → Continue/Back to Map buttons displayed
-10. Next node unlocked → After 3 levels completed in node
+5. Camera intro sequence → Camera rotates from sky to table view (1 second)
+   - Level intro message displays during rotation
+   - Message shows mode name and level number
+6. Profile applied → DifficultyProfileApplier applies profile with mode override
+7. Controller configured → MelodicDictationController set to campaign mode
+8. Round starts → Player plays rounds until `winsRequired` reached
+9. Level complete → CampaignService.RecordLevelWin() called
+10. Endscreen shown → Continue/Back to Map buttons displayed
+11. Next node unlocked → After 3 levels completed in node
 
 ### Save/Load Flow
 
@@ -282,12 +355,15 @@ Assets/Scripts/
 │   ├── DifficultyProfile.cs       # Extended with MovementPolicy
 │   ├── DifficultyProfileApplier.cs # Extended with mode override
 │   └── MelodicDictationController.cs # Extended with campaign mode
-└── UI/
-    ├── CampaignMapView.cs         # Campaign map UI
-    ├── CampaignLevelPicker.cs     # Level selection UI
-    ├── CampaignHUD.cs             # In-game HUD
-    ├── CampaignDebugPanel.cs      # Debug panel
-    └── EndScreenController.cs     # Extended with campaign support
+├── UI/
+│   ├── CampaignMapView.cs         # Campaign map UI
+│   ├── CampaignLevelPicker.cs     # Level selection UI
+│   ├── CampaignHUD.cs             # In-game HUD
+│   ├── CampaignDebugPanel.cs      # Debug panel
+│   └── EndScreenController.cs     # Extended with campaign support
+└── Player/
+    ├── CameraIntro.cs             # Camera rotation intro sequence
+    └── CameraAmbientMotion.cs     # Subtle camera drift and breathing
 ```
 
 ---

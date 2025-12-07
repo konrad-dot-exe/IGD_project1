@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.IO;
 using UnityEngine;
 
@@ -262,7 +263,8 @@ namespace Sonoria.Dictation
                     mode = campaign.nodes[index].GetModeName(),
                     unlocked = (index == 0), // Only first node unlocked by default
                     levels = new System.Collections.Generic.List<bool>(6) { false, false, false, false, false, false },
-                    winsPerLevel = new System.Collections.Generic.List<int>(6) { 0, 0, 0, 0, 0, 0 }
+                    winsPerLevel = new System.Collections.Generic.List<int>(6) { 0, 0, 0, 0, 0, 0 },
+                    topScoresPerLevel = new System.Collections.Generic.List<int>(6) { 0, 0, 0, 0, 0, 0 }
                 };
                 currentSave.nodes.Add(nodeData);
             }
@@ -573,23 +575,29 @@ namespace Sonoria.Dictation
         /// </summary>
         public void StartFromMap(int nodeIndex, int levelIndex)
         {
+            // Start coroutine to handle camera intro and level initialization
+            StartCoroutine(StartFromMapCoroutine(nodeIndex, levelIndex));
+        }
+
+        private System.Collections.IEnumerator StartFromMapCoroutine(int nodeIndex, int levelIndex)
+        {
             if (campaign == null || campaign.nodes == null)
             {
                 Debug.LogError("[CampaignService] Cannot start level: campaign is null");
-                return;
+                yield break;
             }
 
             if (nodeIndex < 0 || nodeIndex >= campaign.nodes.Length)
             {
                 Debug.LogError($"[CampaignService] Invalid node index: {nodeIndex}");
-                return;
+                yield break;
             }
 
             // Validate node is unlocked
             if (!IsNodeUnlocked(nodeIndex))
             {
                 Debug.LogWarning($"[CampaignService] Cannot start level: Node {nodeIndex} is not unlocked");
-                return;
+                yield break;
             }
 
             // Validate level index - allow starting if:
@@ -601,7 +609,7 @@ namespace Sonoria.Dictation
             if (levelIndex != nextIncompleteLevel && !isLevelComplete)
             {
                 Debug.LogWarning($"[CampaignService] Cannot start level {levelIndex}: Next incomplete level is {nextIncompleteLevel}");
-                return;
+                yield break;
             }
             
             // If replaying a completed level, log it for debugging
@@ -614,7 +622,7 @@ namespace Sonoria.Dictation
             if (levelIndex < 0 || levelIndex >= node.levels.Length || node.levels[levelIndex] == null)
             {
                 Debug.LogError($"[CampaignService] Invalid level index: {levelIndex} for node {nodeIndex}");
-                return;
+                yield break;
             }
 
             var level = node.levels[levelIndex];
@@ -633,13 +641,45 @@ namespace Sonoria.Dictation
             if (difficultyApplier == null)
             {
                 Debug.LogError("[CampaignService] Cannot start level: DifficultyProfileApplier not found");
-                return;
+                yield break;
             }
 
             if (dictationController == null)
             {
                 Debug.LogError("[CampaignService] Cannot start level: MelodicDictationController not found");
-                return;
+                yield break;
+            }
+
+            // Play camera intro animation before initializing level
+            var cameraIntro = FindFirstObjectByType<EarFPS.CameraIntro>();
+            if (cameraIntro != null)
+            {
+                // Reset intro state so it can play again (in case we're restarting after game over)
+                cameraIntro.ResetIntro();
+                
+                if (debugLog) Debug.Log("[CampaignService] Playing camera intro animation");
+                bool introComplete = false;
+                cameraIntro.PlayIntro(() => introComplete = true);
+                
+                // Wait for intro to complete
+                while (!introComplete)
+                {
+                    yield return null;
+                }
+                
+                // Reset CameraAmbientMotion base transform to match new camera rotation
+                var cameraAmbientMotion = FindFirstObjectByType<EarFPS.CameraAmbientMotion>();
+                if (cameraAmbientMotion != null)
+                {
+                    cameraAmbientMotion.ResetBaseTransform();
+                    if (debugLog) Debug.Log("[CampaignService] Reset CameraAmbientMotion base transform after intro");
+                }
+                
+                if (debugLog) Debug.Log("[CampaignService] Camera intro complete, proceeding with level initialization");
+            }
+            else
+            {
+                if (debugLog) Debug.Log("[CampaignService] CameraIntro not found, skipping intro animation");
             }
 
             // Apply the level's profile
@@ -664,7 +704,7 @@ namespace Sonoria.Dictation
             else
             {
                 Debug.LogError($"[CampaignService] Level {levelIndex} in node {nodeIndex} has no profile assigned");
-                return;
+                yield break;
             }
 
             // Update HUD if available (placeholder for now)
@@ -813,9 +853,36 @@ namespace Sonoria.Dictation
             {
                 if (debugLog) Debug.Log($"[CampaignService] Level completed! Wins: {winsThisLevel}/{level.roundsToWin}");
                 
-                // Mark level as complete and get newly unlocked node index
-                result.newlyUnlockedNodeIndex = MarkLevelComplete(currentNodeIndex, currentLevelIndex);
+                // Check if level was already completed (replay scenario)
+                bool wasAlreadyComplete = IsLevelComplete(currentNodeIndex, currentLevelIndex);
+                
+                // Only mark as complete and check for unlocks if this is the first completion
+                if (!wasAlreadyComplete)
+                {
+                    // Mark level as complete and get newly unlocked node index
+                    result.newlyUnlockedNodeIndex = MarkLevelComplete(currentNodeIndex, currentLevelIndex);
+                    if (debugLog) Debug.Log($"[CampaignService] Level {currentLevelIndex} marked as complete for the first time");
+                }
+                else
+                {
+                    if (debugLog) Debug.Log($"[CampaignService] Level {currentLevelIndex} was already complete (replay scenario), skipping unlock check");
+                    // Still update top score even on replay
+                }
+                
                 result.levelComplete = true;
+                
+                // Update top score if current score is higher (works for both first completion and replay)
+                if (dictationController != null)
+                {
+                    int currentScore = dictationController.Score;
+                    int currentTopScore = currentSave.GetTopScore(currentNodeIndex, currentLevelIndex);
+                    if (currentScore > currentTopScore)
+                    {
+                        currentSave.SetTopScore(currentNodeIndex, currentLevelIndex, currentScore);
+                        if (debugLog) Debug.Log($"[CampaignService] New top score for level {currentLevelIndex}: {currentScore} (previous: {currentTopScore})");
+                        SaveToDisk(); // Persist the new top score
+                    }
+                }
                 
                 // Reset wins counter
                 winsThisLevel = 0;
@@ -845,6 +912,15 @@ namespace Sonoria.Dictation
                 if (debugLog) Debug.Log("[CampaignService] All levels in current node are complete");
                 // Return to map (handled by UI)
             }
+        }
+
+        /// <summary>
+        /// Resets the win counter for the current level (used when restarting after game over).
+        /// </summary>
+        public void ResetWinsThisLevel()
+        {
+            winsThisLevel = 0;
+            if (debugLog) Debug.Log("[CampaignService] Reset winsThisLevel counter");
         }
 
         void OnDestroy()

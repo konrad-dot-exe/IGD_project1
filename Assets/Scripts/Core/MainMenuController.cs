@@ -26,6 +26,9 @@ public class MainMenuController : MonoBehaviour
 
     void Start()
     {
+        // Ensure cursor is unlocked when MainMenu loads (safety measure)
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
         RefreshScores();
     }
 

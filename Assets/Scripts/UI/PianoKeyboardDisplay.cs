@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using EarFPS;
 using Sonoria.Dictation;
+using Sonoria.MusicTheory;
 
 namespace EarFPS
 {
@@ -522,17 +523,10 @@ namespace EarFPS
             if (!anyAllowed)
                 return result;
 
-            // Get pitch-class array for the mode (same mapping as PianoKeyboardUI and MelodyGenerator)
-            int[] degreeOrder = mode switch
-            {
-                ScaleMode.Ionian => new int[] { 0, 2, 4, 5, 7, 9, 11 },
-                ScaleMode.Dorian => new int[] { 0, 2, 3, 5, 7, 9, 10 },
-                ScaleMode.Phrygian => new int[] { 0, 1, 3, 5, 7, 8, 10 },
-                ScaleMode.Lydian => new int[] { 0, 2, 4, 6, 7, 9, 11 },
-                ScaleMode.Mixolydian => new int[] { 0, 2, 4, 5, 7, 9, 10 },
-                ScaleMode.Aeolian => new int[] { 0, 2, 3, 5, 7, 8, 10 },
-                _ => new int[] { 0, 2, 4, 5, 7, 9, 11 } // Ionian fallback
-            };
+            // Get pitch-class array for the mode using TheoryScale (centralized logic)
+            Sonoria.MusicTheory.ScaleMode theoryMode = TheoryKeyUtils.FromLegacyMode(mode);
+            TheoryKey key = new TheoryKey(theoryMode);
+            int[] degreeOrder = TheoryScale.GetDiatonicPitchClasses(key);
 
             // For each allowed degree (1-7), collect all MIDI notes in register with matching pitch-class
             for (int degree = 1; degree <= 7; degree++)
@@ -612,6 +606,102 @@ namespace EarFPS
                 bool isFeatured = featuredNotes.Contains(kvp.Key);
                 float opacity = isFeatured ? 1.0f : opacityToUse;
                 kvp.Value.SetOpacity(opacity);
+            }
+        }
+
+        /// <summary>
+        /// Sets the active (featured) MIDI notes for display.
+        /// Featured notes will be shown at 100% opacity, all others at nonFeaturedKeyOpacity.
+        /// If the keyboard hasn't been built yet, it will be built automatically.
+        /// </summary>
+        /// <param name="midiNotes">Collection of MIDI notes that should be highlighted</param>
+        public void SetActiveNotes(System.Collections.Generic.IEnumerable<int> midiNotes)
+        {
+            // Ensure keyboard is built if not already built
+            if (!keyboardBuilt)
+            {
+                int displayMin = Mathf.Clamp(displayRangeMinMidi, 0, 127);
+                int displayMax = Mathf.Clamp(displayRangeMaxMidi, 0, 127);
+                if (displayMin > displayMax)
+                {
+                    int temp = displayMin;
+                    displayMin = displayMax;
+                    displayMax = temp;
+                }
+                BuildKeyboard(displayMin, displayMax);
+                currentDisplayMin = displayMin;
+                currentDisplayMax = displayMax;
+                keyboardBuilt = true;
+            }
+
+            featuredNotes.Clear();
+            if (midiNotes != null)
+            {
+                foreach (int note in midiNotes)
+                {
+                    featuredNotes.Add(note);
+                }
+            }
+            UpdateKeyOpacityForFeaturedNotes();
+        }
+
+        /// <summary>
+        /// Shows the keyboard with all keys visible but dimmed (no active notes).
+        /// Used for default/initial state display.
+        /// </summary>
+        public void ShowDefault()
+        {
+            // Ensure keyboard is built if not already built
+            if (!keyboardBuilt)
+            {
+                int displayMin = Mathf.Clamp(displayRangeMinMidi, 0, 127);
+                int displayMax = Mathf.Clamp(displayRangeMaxMidi, 0, 127);
+                if (displayMin > displayMax)
+                {
+                    int temp = displayMin;
+                    displayMin = displayMax;
+                    displayMax = temp;
+                }
+                BuildKeyboard(displayMin, displayMax);
+                currentDisplayMin = displayMin;
+                currentDisplayMax = displayMax;
+                keyboardBuilt = true;
+            }
+
+            // Clear featured notes (no active notes)
+            featuredNotes.Clear();
+
+            // Show the keyboard
+            if (canvasGroup != null)
+            {
+                canvasGroup.alpha = 1f;
+                canvasGroup.interactable = false;
+                canvasGroup.blocksRaycasts = false;
+            }
+
+            // Ensure GameObject is active
+            if (!gameObject.activeSelf)
+                gameObject.SetActive(true);
+
+            // Ensure keysParent is active
+            if (keysParent != null && !keysParent.gameObject.activeSelf)
+                keysParent.gameObject.SetActive(true);
+
+            // Set all keys to dimmed opacity (nonFeaturedKeyOpacity)
+            foreach (var kvp in _keyByNote)
+            {
+                if (kvp.Value != null)
+                {
+                    // Ensure key is active and Image is initialized
+                    if (!kvp.Value.gameObject.activeSelf)
+                        kvp.Value.gameObject.SetActive(true);
+                    
+                    var image = kvp.Value.GetComponent<Image>();
+                    if (image != null)
+                    {
+                        kvp.Value.SetOpacity(nonFeaturedKeyOpacity);
+                    }
+                }
             }
         }
 
