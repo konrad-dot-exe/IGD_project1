@@ -27,6 +27,17 @@ namespace EarFPS
         [SerializeField] private Color nonDiatonicColor = Color.red;
         [SerializeField] private TextMeshProUGUI statusTagText;
 
+        private CanvasGroup canvasGroup;
+        private Color originalBackgroundColor; // Store original color for tinting
+        private bool originalColorStored = false;
+        
+        // Cached child visuals for state-based tinting
+        private List<Image> childImages = new List<Image>();
+        private List<Color> childImageBaseColors = new List<Color>();
+        private List<TMPro.TextMeshProUGUI> childTexts = new List<TMPro.TextMeshProUGUI>();
+        private List<Color> childTextBaseColors = new List<Color>();
+        private bool visualsCached = false;
+
         /// <summary>
         /// Sets all text elements for this chord column.
         /// Supports both triads (3 notes) and 7th chords (4 notes).
@@ -93,7 +104,14 @@ namespace EarFPS
                 backgroundImage.color = status == ChordDiatonicStatus.Diatonic
                     ? diatonicColor
                     : nonDiatonicColor;
+                
+                // Store original color for tinting (reset flag so it updates if SetChord is called again)
+                originalBackgroundColor = backgroundImage.color;
+                originalColorStored = true;
             }
+
+            // Re-cache child visuals in case structure changed
+            CacheChildVisuals();
 
             if (statusTagText != null)
             {
@@ -112,6 +130,163 @@ namespace EarFPS
             {
                 analysisLabel.text = analysisInfo ?? string.Empty;
             }
+
+            // Re-cache child visuals in case structure changed
+            CacheChildVisuals();
+        }
+
+        void Awake()
+        {
+            CacheChildVisuals();
+        }
+
+        /// <summary>
+        /// Caches all child Image and TMP_Text components for state-based tinting.
+        /// Called on Awake and can be called again if structure changes.
+        /// </summary>
+        private void CacheChildVisuals()
+        {
+            childImages.Clear();
+            childImageBaseColors.Clear();
+            childTexts.Clear();
+            childTextBaseColors.Clear();
+
+            // Get all child Images (including inactive ones)
+            Image[] allImages = GetComponentsInChildren<Image>(includeInactive: true);
+            foreach (var img in allImages)
+            {
+                // Skip the root background image - it's handled separately
+                if (img == backgroundImage)
+                    continue;
+                    
+                childImages.Add(img);
+                childImageBaseColors.Add(img.color);
+            }
+
+            // Get all child TMP_Text components (including inactive ones)
+            TMPro.TextMeshProUGUI[] allTexts = GetComponentsInChildren<TMPro.TextMeshProUGUI>(includeInactive: true);
+            foreach (var text in allTexts)
+            {
+                childTexts.Add(text);
+                childTextBaseColors.Add(text.color);
+            }
+
+            visualsCached = true;
+        }
+
+        /// <summary>
+        /// Multiplies RGB components of two colors, preserving the base color's alpha.
+        /// </summary>
+        private static Color MultiplyRGB(Color baseColor, Color tint)
+        {
+            return new Color(
+                baseColor.r * tint.r,
+                baseColor.g * tint.g,
+                baseColor.b * tint.b,
+                baseColor.a // Preserve base alpha
+            );
+        }
+
+        /// <summary>
+        /// Visual state for chord columns during playback.
+        /// </summary>
+        public enum ColumnVizState
+        {
+            Hidden,      // Not yet reached in playback
+            Visible,     // Already revealed/played
+            Highlighted  // Currently playing region
+        }
+
+        /// <summary>
+        /// Sets the visual state of this chord column.
+        /// Uses CanvasGroup alpha to preserve layout spacing (doesn't collapse width).
+        /// </summary>
+        /// <param name="state">The visual state to apply</param>
+        /// <param name="hiddenAlpha">Alpha value for Hidden state (0-1)</param>
+        /// <param name="visibleAlpha">Alpha value for Visible state (0-1)</param>
+        /// <param name="highlightedAlpha">Alpha value for Highlighted state (0-1)</param>
+        /// <param name="visibleTint">Color tint for Visible state (applied to background)</param>
+        /// <param name="highlightedTint">Color tint for Highlighted state (applied to background)</param>
+        public void SetVizState(ColumnVizState state, float hiddenAlpha, float visibleAlpha, float highlightedAlpha, Color visibleTint, Color highlightedTint)
+        {
+            // Get or create CanvasGroup for alpha control
+            if (canvasGroup == null)
+            {
+                canvasGroup = GetComponent<CanvasGroup>();
+                if (canvasGroup == null)
+                {
+                    canvasGroup = gameObject.AddComponent<CanvasGroup>();
+                }
+            }
+
+            // Store original background color on first call
+            if (!originalColorStored && backgroundImage != null)
+            {
+                originalBackgroundColor = backgroundImage.color;
+                originalColorStored = true;
+            }
+
+            // Apply alpha based on state
+            float targetAlpha = state switch
+            {
+                ColumnVizState.Hidden => hiddenAlpha,
+                ColumnVizState.Visible => visibleAlpha,
+                ColumnVizState.Highlighted => highlightedAlpha,
+                _ => visibleAlpha
+            };
+
+            canvasGroup.alpha = targetAlpha;
+            canvasGroup.blocksRaycasts = targetAlpha > 0.01f; // Allow interaction if visible
+            canvasGroup.interactable = targetAlpha > 0.01f;
+
+            // Determine tint color based on state (Hidden uses same tint as Visible)
+            Color tint = state switch
+            {
+                ColumnVizState.Hidden => visibleTint, // Use visible tint (alpha will be lower)
+                ColumnVizState.Visible => visibleTint,
+                ColumnVizState.Highlighted => highlightedTint,
+                _ => Color.white
+            };
+
+            // Ensure visuals are cached
+            if (!visualsCached)
+            {
+                CacheChildVisuals();
+            }
+
+            // Apply color tint to background image
+            if (backgroundImage != null && originalColorStored)
+            {
+                // Multiply original color by tint to preserve diatonic/non-diatonic coloring
+                backgroundImage.color = MultiplyRGB(originalBackgroundColor, tint);
+            }
+
+            // Apply tint to all child Images (note tiles, etc.)
+            for (int i = 0; i < childImages.Count && i < childImageBaseColors.Count; i++)
+            {
+                if (childImages[i] != null)
+                {
+                    childImages[i].color = MultiplyRGB(childImageBaseColors[i], tint);
+                }
+            }
+
+            // Apply tint to all child TMP_Text components
+            for (int i = 0; i < childTexts.Count && i < childTextBaseColors.Count; i++)
+            {
+                if (childTexts[i] != null)
+                {
+                    childTexts[i].color = MultiplyRGB(childTextBaseColors[i], tint);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Legacy method for backward compatibility. Use SetVizState() instead.
+        /// </summary>
+        [System.Obsolete("Use SetVizState() instead")]
+        public void SetRevealed(bool revealed)
+        {
+            SetVizState(revealed ? ColumnVizState.Visible : ColumnVizState.Hidden, 0f, 1f, 1f, Color.white, Color.white);
         }
 
         /// <summary>

@@ -17,14 +17,68 @@
 	<object class="MixerBusEffectChain" id="{23544cc7-1fd3-4eff-bf27-3b95555943d7}">
 		<relationship name="effects">
 			<destination>{182f6f78-dc8a-425e-a7b4-460692657871}</destination>
+			<destination>{c9eea44f-c1b8-4182-94f4-6e8bef9a2b0d}</destination>
+			<destination>{179210df-07b1-43b2-8e90-c27e01808545}</destination>
+			<destination>{33f145c9-0dab-473a-a72d-300b98cf9c78}</destination>
+			<destination>{fb4f637f-10bb-4b02-8086-f495e44a35fc}</destination>
+			<destination>{cf604b63-9362-46f2-bec5-2214993726b1}</destination>
 			<destination>{45422d60-25c6-421f-a8a0-3e995dda7194}</destination>
 		</relationship>
 	</object>
 	<object class="MixerBusPanner" id="{e88fa540-7270-4974-a245-e7c510fb1082}" />
 	<object class="MixerBusFader" id="{182f6f78-dc8a-425e-a7b4-460692657871}" />
+	<object class="MultibandEqEffect" id="{c9eea44f-c1b8-4182-94f4-6e8bef9a2b0d}">
+		<property name="filterTypeA">
+			<value>9</value>
+		</property>
+		<property name="filterTypeB">
+			<value>7</value>
+		</property>
+		<property name="frequencyA">
+			<value>7647.40625</value>
+		</property>
+		<property name="frequencyB">
+			<value>250.50174</value>
+		</property>
+		<property name="qualityA">
+			<value>0.199999988</value>
+		</property>
+		<property name="gainA">
+			<value>15.5</value>
+		</property>
+		<property name="gainB">
+			<value>-5.6896553</value>
+		</property>
+	</object>
+	<object class="ChorusEffect" id="{179210df-07b1-43b2-8e90-c27e01808545}">
+		<property name="rate">
+			<value>0.560000002</value>
+		</property>
+		<property name="depth">
+			<value>10</value>
+		</property>
+		<property name="mix">
+			<value>40</value>
+		</property>
+	</object>
+	<object class="DistortionEffect" id="{33f145c9-0dab-473a-a72d-300b98cf9c78}">
+		<property name="level">
+			<value>0.204999998</value>
+		</property>
+	</object>
+	<object class="GainEffect" id="{fb4f637f-10bb-4b02-8086-f495e44a35fc}">
+		<property name="gain">
+			<value>4</value>
+		</property>
+	</object>
+	<object class="CompressorEffect" id="{cf604b63-9362-46f2-bec5-2214993726b1}">
+		<property name="threshold">
+			<value>-14.5</value>
+		</property>
+	</object>
 	<object class="MixerSend" id="{45422d60-25c6-421f-a8a0-3e995dda7194}">
 		<property name="level">
-			<value>-9.5</value>
+			<value>-4</value>
 		</property>
 		<property name="inputFormat">
 			<value>1</value>

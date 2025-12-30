@@ -80,6 +80,38 @@ namespace Sonoria.MusicTheory
             {
                 // Gb major (flat-side spelling for pitch class 6)
                 { (6, ChordQuality.Major), new[] { "Gb", "Bb", "Db" } }, // Gb major
+                // C# major (sharp-side spelling for pitch class 1)
+                { (1, ChordQuality.Major), new[] { "C#", "E#", "G#" } }, // C# major
+                // C# minor (sharp-side spelling for pitch class 1)
+                { (1, ChordQuality.Minor), new[] { "C#", "E", "G#" } }, // C#m
+                // C# diminished (sharp-side spelling for pitch class 1)
+                { (1, ChordQuality.Diminished), new[] { "C#", "E", "G" } }, // C#dim
+                // C# augmented (sharp-side spelling for pitch class 1)
+                { (1, ChordQuality.Augmented), new[] { "C#", "E#", "G##" } }, // C#aug (G## = A enharmonically, but theoretically correct)
+                // G# major (sharp-side spelling for pitch class 8)
+                { (8, ChordQuality.Major), new[] { "G#", "B#", "D#" } }, // G# major
+                // G# minor (sharp-side spelling for pitch class 8)
+                { (8, ChordQuality.Minor), new[] { "G#", "B", "D#" } }, // G#m
+                // G# diminished (sharp-side spelling for pitch class 8)
+                { (8, ChordQuality.Diminished), new[] { "G#", "B", "D" } }, // G#dim
+                // G# augmented (sharp-side spelling for pitch class 8)
+                { (8, ChordQuality.Augmented), new[] { "G#", "B#", "D##" } }, // G#aug (D## = E enharmonically, but theoretically correct)
+                // D# major (sharp-side spelling for pitch class 3)
+                { (3, ChordQuality.Major), new[] { "D#", "F##", "A#" } }, // D# major
+                // D# minor (sharp-side spelling for pitch class 3)
+                { (3, ChordQuality.Minor), new[] { "D#", "F#", "A#" } }, // D#m
+                // D# diminished (sharp-side spelling for pitch class 3)
+                { (3, ChordQuality.Diminished), new[] { "D#", "F#", "A" } }, // D#dim
+                // D# augmented (sharp-side spelling for pitch class 3)
+                { (3, ChordQuality.Augmented), new[] { "D#", "F##", "A##" } }, // D#aug (A## = B enharmonically, but theoretically correct)
+                // A# major (sharp-side spelling for pitch class 10)
+                { (10, ChordQuality.Major), new[] { "A#", "C##", "E#" } }, // A# major
+                // A# minor (sharp-side spelling for pitch class 10)
+                { (10, ChordQuality.Minor), new[] { "A#", "C#", "E#" } }, // A#m
+                // A# diminished (sharp-side spelling for pitch class 10)
+                { (10, ChordQuality.Diminished), new[] { "A#", "C#", "E" } }, // A#dim
+                // A# augmented (sharp-side spelling for pitch class 10)
+                { (10, ChordQuality.Augmented), new[] { "A#", "C##", "E##" } }, // A#aug (E## = F# enharmonically, but theoretically correct)
             };
 
         // Seventh chord spelling lookup table: maps (rootPc, triadQuality, seventhQuality) to 7th note name
@@ -164,6 +196,48 @@ namespace Sonoria.MusicTheory
             {
                 // Gb dominant7 (flat-side spelling for pitch class 6)
                 { (6, ChordQuality.Major, SeventhQuality.Dominant7), "Gb" }, // Gb7: Gb-Bb-Db-Gb (7th is Fb enharmonically, but we use Gb to match root spelling)
+                // C# dominant7 (sharp-side spelling for pitch class 1)
+                { (1, ChordQuality.Major, SeventhQuality.Dominant7), "B" }, // C#7: C#-E#-G#-B
+                // C# major7 (sharp-side spelling for pitch class 1)
+                { (1, ChordQuality.Major, SeventhQuality.Major7), "B#" }, // C#maj7: C#-E#-G#-B# (C enharmonically, but theoretically correct)
+                // C# minor7 (sharp-side spelling for pitch class 1)
+                { (1, ChordQuality.Minor, SeventhQuality.Minor7), "B" }, // C#m7: C#-E-G#-B
+                // G# dominant7 (sharp-side spelling for pitch class 8)
+                { (8, ChordQuality.Major, SeventhQuality.Dominant7), "F#" }, // G#7: G#-B#-D#-F#
+                // G# major7 (sharp-side spelling for pitch class 8)
+                { (8, ChordQuality.Major, SeventhQuality.Major7), "F##" }, // G#maj7: G#-B#-D#-F## (G enharmonically, but theoretically correct)
+                // G# minor7 (sharp-side spelling for pitch class 8)
+                { (8, ChordQuality.Minor, SeventhQuality.Minor7), "F#" }, // G#m7: G#-B-D#-F#
+                // G# half-diminished7 (sharp-side spelling for pitch class 8)
+                { (8, ChordQuality.Diminished, SeventhQuality.HalfDiminished7), "F#" }, // G#ø7: G#-B-D-F#
+                // G# diminished7 (sharp-side spelling for pitch class 8)
+                { (8, ChordQuality.Diminished, SeventhQuality.Diminished7), "F#" }, // G#dim7: G#-B-D-F#
+                // D# dominant7 (sharp-side spelling for pitch class 3)
+                { (3, ChordQuality.Major, SeventhQuality.Dominant7), "C#" }, // D#7: D#-F##-A#-C#
+                // D# major7 (sharp-side spelling for pitch class 3)
+                { (3, ChordQuality.Major, SeventhQuality.Major7), "C##" }, // D#maj7: D#-F##-A#-C## (D enharmonically, but theoretically correct)
+                // D# minor7 (sharp-side spelling for pitch class 3)
+                { (3, ChordQuality.Minor, SeventhQuality.Minor7), "C#" }, // D#m7: D#-F#-A#-C#
+                // D# half-diminished7 (sharp-side spelling for pitch class 3)
+                { (3, ChordQuality.Diminished, SeventhQuality.HalfDiminished7), "C#" }, // D#ø7: D#-F#-A-C#
+                // D# diminished7 (sharp-side spelling for pitch class 3)
+                { (3, ChordQuality.Diminished, SeventhQuality.Diminished7), "C#" }, // D#dim7: D#-F#-A-C#
+                // A# dominant7 (sharp-side spelling for pitch class 10)
+                { (10, ChordQuality.Major, SeventhQuality.Dominant7), "G#" }, // A#7: A#-C##-E#-G#
+                // A# major7 (sharp-side spelling for pitch class 10)
+                { (10, ChordQuality.Major, SeventhQuality.Major7), "G##" }, // A#maj7: A#-C##-E#-G## (A enharmonically, but theoretically correct)
+                // A# minor7 (sharp-side spelling for pitch class 10)
+                { (10, ChordQuality.Minor, SeventhQuality.Minor7), "G#" }, // A#m7: A#-C#-E#-G#
+                // A# half-diminished7 (sharp-side spelling for pitch class 10)
+                { (10, ChordQuality.Diminished, SeventhQuality.HalfDiminished7), "G#" }, // A#ø7: A#-C#-E-G#
+                // A# diminished7 (sharp-side spelling for pitch class 10)
+                { (10, ChordQuality.Diminished, SeventhQuality.Diminished7), "G#" }, // A#dim7: A#-C#-E-G#
+                // C# half-diminished7 (sharp-side spelling for pitch class 1)
+                { (1, ChordQuality.Diminished, SeventhQuality.HalfDiminished7), "B" }, // C#ø7: C#-E-G-B
+                // C# diminished7 (sharp-side spelling for pitch class 1)
+                { (1, ChordQuality.Diminished, SeventhQuality.Diminished7), "Bb" }, // C#dim7: C#-E-G-Bb
+                // C# augmented7 (sharp-side spelling for pitch class 1) - using dominant 7th quality
+                { (1, ChordQuality.Augmented, SeventhQuality.Dominant7), "B" }, // C#aug7: C#-E#-G##-B (theoretically correct)
             };
 
         /// <summary>
@@ -215,6 +289,13 @@ namespace Sonoria.MusicTheory
                 if (EnharmonicSpellings.TryGetValue((normalizedPc, quality), out var enharmonicNames))
                     return enharmonicNames;
             }
+            
+            // Special handling for pitch class 1 (C#/Db): use C# if offset is positive (raised/sharpen)
+            if (normalizedPc == 1 && rootSemitoneOffset > 0)
+            {
+                if (EnharmonicSpellings.TryGetValue((normalizedPc, quality), out var enharmonicNames))
+                    return enharmonicNames;
+            }
 
             // Default lookup
             if (TriadSpellings.TryGetValue((normalizedPc, quality), out var names))
@@ -257,6 +338,245 @@ namespace Sonoria.MusicTheory
                 if (EnharmonicSeventhSpellings.TryGetValue((normalizedPc, triadQuality, seventhQuality), out seventhName))
                 {
                     // Found enharmonic spelling
+                }
+            }
+            
+            // Check for enharmonic 7th spelling for pitch class 1 (C#/Db): use C# if offset is positive
+            if (normalizedPc == 1 && rootSemitoneOffset > 0)
+            {
+                if (EnharmonicSeventhSpellings.TryGetValue((normalizedPc, triadQuality, seventhQuality), out seventhName))
+                {
+                    // Found enharmonic spelling
+                }
+            }
+
+            // If no enharmonic spelling found, use standard lookup
+            if (seventhName == null)
+            {
+                if (!SeventhSpellings.TryGetValue((normalizedPc, triadQuality, seventhQuality), out seventhName))
+                {
+                    // No 7th spelling found - fall back to null (caller can use heuristic)
+                    return null;
+                }
+            }
+
+            // Combine triad names with 7th name
+            return new[] { triadNames[0], triadNames[1], triadNames[2], seventhName };
+        }
+
+        /// <summary>
+        /// Returns canonical root/third/fifth names for a triad, using key's accidental preference
+        /// for enharmonic disambiguation when the root is diatonic (offset == 0).
+        /// </summary>
+        /// <param name="rootPitchClass">Root pitch class (0-11, where 0=C, 1=C#/Db, etc.)</param>
+        /// <param name="quality">Chord quality (Major, Minor, Diminished, or Augmented)</param>
+        /// <param name="key">The key context for determining accidental preference</param>
+        /// <param name="rootSemitoneOffset">Semitone offset from diatonic degree (negative = flat, positive = sharp, 0 = diatonic)</param>
+        /// <returns>Array of 3 strings [root, third, fifth] with canonical spellings, or null if not found</returns>
+        public static string[] GetTriadSpelling(int rootPitchClass, ChordQuality quality, TheoryKey key, int rootSemitoneOffset)
+        {
+            // Normalize pitch class to 0-11 range
+            int normalizedPc = (rootPitchClass % 12 + 12) % 12;
+
+            // Support Major, Minor, Diminished, and Augmented
+            if (quality != ChordQuality.Major && quality != ChordQuality.Minor &&
+                quality != ChordQuality.Diminished && quality != ChordQuality.Augmented)
+                return null;
+
+            // For enharmonic pitch classes, use key's accidental preference when offset is 0 (diatonic)
+            // Enharmonic pitch classes: 1 (C#/Db), 3 (D#/Eb), 6 (F#/Gb), 8 (G#/Ab), 10 (A#/Bb)
+            bool isEnharmonicPc = normalizedPc == 1 || normalizedPc == 3 || normalizedPc == 6 || normalizedPc == 8 || normalizedPc == 10;
+            
+            if (isEnharmonicPc)
+            {
+                // Get key's accidental preference
+                AccidentalPreference keyPreference = TheoryPitch.GetAccidentalPreference(key);
+                
+                // For diatonic roots (offset == 0), use key preference
+                // For non-diatonic roots, use offset to determine preference
+                bool preferSharps = false;
+                if (rootSemitoneOffset == 0)
+                {
+                    // Diatonic root: use key preference
+                    preferSharps = (keyPreference == AccidentalPreference.Sharps);
+                }
+                else
+                {
+                    // Non-diatonic root: use offset (positive = sharp, negative = flat)
+                    preferSharps = (rootSemitoneOffset > 0);
+                }
+                
+                // For pitch class 1 (C#/Db): use C# spelling if preferSharps, Db if preferFlats
+                if (normalizedPc == 1)
+                {
+                    if (preferSharps)
+                    {
+                        // Try C# spelling (EnharmonicSpellings)
+                        if (EnharmonicSpellings.TryGetValue((normalizedPc, quality), out var enharmonicNames))
+                            return enharmonicNames;
+                    }
+                    // If preferFlats or enharmonic not found, fall through to default (Db spelling)
+                }
+                
+                // For pitch class 3 (D#/Eb): use D# spelling if preferSharps, Eb if preferFlats
+                if (normalizedPc == 3)
+                {
+                    if (preferSharps)
+                    {
+                        // Try D# spelling (EnharmonicSpellings)
+                        if (EnharmonicSpellings.TryGetValue((normalizedPc, quality), out var enharmonicNames))
+                            return enharmonicNames;
+                    }
+                    // If preferFlats or enharmonic not found, fall through to default (Eb spelling)
+                }
+                
+                // For pitch class 6 (F#/Gb): use Gb spelling if preferFlats, F# if preferSharps
+                if (normalizedPc == 6)
+                {
+                    if (!preferSharps)
+                    {
+                        // Try Gb spelling (EnharmonicSpellings)
+                        if (EnharmonicSpellings.TryGetValue((normalizedPc, quality), out var enharmonicNames))
+                            return enharmonicNames;
+                    }
+                    // If preferSharps or enharmonic not found, fall through to default (F# spelling)
+                }
+                
+                // For pitch class 8 (G#/Ab): use G# spelling if preferSharps, Ab if preferFlats
+                if (normalizedPc == 8)
+                {
+                    if (preferSharps)
+                    {
+                        // Try G# spelling (EnharmonicSpellings)
+                        if (EnharmonicSpellings.TryGetValue((normalizedPc, quality), out var enharmonicNames))
+                            return enharmonicNames;
+                    }
+                    // If preferFlats or enharmonic not found, fall through to default (Ab spelling)
+                }
+                
+                // For pitch class 10 (A#/Bb): use A# spelling if preferSharps, Bb if preferFlats
+                if (normalizedPc == 10)
+                {
+                    if (preferSharps)
+                    {
+                        // Try A# spelling (EnharmonicSpellings)
+                        if (EnharmonicSpellings.TryGetValue((normalizedPc, quality), out var enharmonicNames))
+                            return enharmonicNames;
+                    }
+                    // If preferFlats or enharmonic not found, fall through to default (Bb spelling)
+                }
+            }
+            
+            // Legacy handling for non-diatonic roots (when offset != 0)
+            // Special handling for pitch class 6 (F#/Gb): use Gb if offset is negative (lowered/flattened)
+            if (normalizedPc == 6 && rootSemitoneOffset < 0)
+            {
+                if (EnharmonicSpellings.TryGetValue((normalizedPc, quality), out var enharmonicNames))
+                    return enharmonicNames;
+            }
+            
+            // Special handling for pitch class 1 (C#/Db): use C# if offset is positive (raised/sharpen)
+            if (normalizedPc == 1 && rootSemitoneOffset > 0)
+            {
+                if (EnharmonicSpellings.TryGetValue((normalizedPc, quality), out var enharmonicNames))
+                    return enharmonicNames;
+            }
+
+            // Default lookup
+            if (TriadSpellings.TryGetValue((normalizedPc, quality), out var names))
+                return names;
+
+            return null;
+        }
+
+        /// <summary>
+        /// Returns canonical root/third/fifth/seventh names for a seventh chord, using key's accidental preference
+        /// for enharmonic disambiguation when the root is diatonic (offset == 0).
+        /// </summary>
+        /// <param name="rootPitchClass">Root pitch class (0-11, where 0=C, 1=C#/Db, etc.)</param>
+        /// <param name="triadQuality">Triad quality (Major, Minor, Diminished, or Augmented)</param>
+        /// <param name="seventhQuality">Seventh quality (Dominant7, Major7, Minor7, HalfDiminished7, Diminished7)</param>
+        /// <param name="key">The key context for determining accidental preference</param>
+        /// <param name="rootSemitoneOffset">Semitone offset from diatonic degree for enharmonic disambiguation (default: 0)</param>
+        /// <returns>Array of 4 strings [root, third, fifth, seventh] with canonical spellings, or null if not found</returns>
+        public static string[] GetSeventhChordSpelling(
+            int rootPitchClass,
+            ChordQuality triadQuality,
+            SeventhQuality seventhQuality,
+            TheoryKey key,
+            int rootSemitoneOffset = 0)
+        {
+            // Normalize pitch class to 0-11 range
+            int normalizedPc = (rootPitchClass % 12 + 12) % 12;
+
+            // Get triad spelling (root, 3rd, 5th) - use key-aware version
+            string[] triadNames = GetTriadSpelling(normalizedPc, triadQuality, key, rootSemitoneOffset);
+            if (triadNames == null || triadNames.Length < 3)
+            {
+                // No triad spelling available - cannot build seventh chord spelling
+                return null;
+            }
+
+            // For enharmonic pitch classes, use key's accidental preference when offset is 0 (diatonic)
+            bool isEnharmonicPc = normalizedPc == 1 || normalizedPc == 3 || normalizedPc == 6 || normalizedPc == 8 || normalizedPc == 10;
+            
+            string seventhName = null;
+            if (isEnharmonicPc)
+            {
+                // Get key's accidental preference
+                AccidentalPreference keyPreference = TheoryPitch.GetAccidentalPreference(key);
+                
+                // For diatonic roots (offset == 0), use key preference
+                // For non-diatonic roots, use offset to determine preference
+                bool preferSharps = false;
+                if (rootSemitoneOffset == 0)
+                {
+                    // Diatonic root: use key preference
+                    preferSharps = (keyPreference == AccidentalPreference.Sharps);
+                }
+                else
+                {
+                    // Non-diatonic root: use offset (positive = sharp, negative = flat)
+                    preferSharps = (rootSemitoneOffset > 0);
+                }
+                
+                // Try enharmonic 7th spelling if it matches preference
+                if (preferSharps && (normalizedPc == 1 || normalizedPc == 3 || normalizedPc == 8 || normalizedPc == 10))
+                {
+                    // Sharp-side spellings for pitch classes 1 (C#), 3 (D#), 8 (G#), 10 (A#)
+                    if (EnharmonicSeventhSpellings.TryGetValue((normalizedPc, triadQuality, seventhQuality), out seventhName))
+                    {
+                        // Found enharmonic spelling
+                    }
+                }
+                else if (!preferSharps && normalizedPc == 6)
+                {
+                    // Gb spelling for pitch class 6
+                    if (EnharmonicSeventhSpellings.TryGetValue((normalizedPc, triadQuality, seventhQuality), out seventhName))
+                    {
+                        // Found enharmonic spelling
+                    }
+                }
+            }
+            
+            // Check for enharmonic 7th spelling first (legacy logic for non-diatonic)
+            if (seventhName == null)
+            {
+                if (normalizedPc == 6 && rootSemitoneOffset < 0)
+                {
+                    if (EnharmonicSeventhSpellings.TryGetValue((normalizedPc, triadQuality, seventhQuality), out seventhName))
+                    {
+                        // Found enharmonic spelling
+                    }
+                }
+                
+                // Check for enharmonic 7th spelling for pitch class 1 (C#/Db): use C# if offset is positive
+                if (normalizedPc == 1 && rootSemitoneOffset > 0)
+                {
+                    if (EnharmonicSeventhSpellings.TryGetValue((normalizedPc, triadQuality, seventhQuality), out seventhName))
+                    {
+                        // Found enharmonic spelling
+                    }
                 }
             }
 

@@ -563,6 +563,197 @@ namespace Sonoria.MusicTheory
                 Debug.LogWarning("=== Double Accidentals Found (Some Tests Failed) ===");
             }
         }
+
+        /// <summary>
+        /// Tests that "Vb9" is normalized to "V7b9" (dominant + b9 implies 7th).
+        /// Verifies that both produce the same chord recipe and voicing behavior.
+        /// </summary>
+        public static void TestVb9Normalization()
+        {
+            Debug.Log("=== TheoryChord: Vb9 Normalization Test ===");
+            var key = new TheoryKey(ScaleMode.Ionian);
+
+            // Parse both variants
+            if (!TheoryChord.TryParseRomanNumeral(key, "Vb9", out var recipeVb9))
+            {
+                Debug.LogError("Failed to parse 'Vb9'");
+                return;
+            }
+
+            if (!TheoryChord.TryParseRomanNumeral(key, "V7b9", out var recipeV7b9))
+            {
+                Debug.LogError("Failed to parse 'V7b9'");
+                return;
+            }
+
+            // Verify they produce the same recipe
+            bool recipesMatch = recipeVb9.Degree == recipeV7b9.Degree &&
+                               recipeVb9.Quality == recipeV7b9.Quality &&
+                               recipeVb9.Extension == recipeV7b9.Extension &&
+                               recipeVb9.SeventhQuality == recipeV7b9.SeventhQuality &&
+                               recipeVb9.RequestedExtensions.TensionFlat9 == recipeV7b9.RequestedExtensions.TensionFlat9 &&
+                               recipeVb9.RequestedExtensions.Tension9 == recipeV7b9.RequestedExtensions.Tension9;
+
+            if (!recipesMatch)
+            {
+                Debug.LogError($"Vb9 and V7b9 produce different recipes:\n" +
+                             $"  Vb9:  Degree={recipeVb9.Degree}, Quality={recipeVb9.Quality}, Extension={recipeVb9.Extension}, " +
+                             $"SeventhQuality={recipeVb9.SeventhQuality}, TensionFlat9={recipeVb9.RequestedExtensions.TensionFlat9}\n" +
+                             $"  V7b9: Degree={recipeV7b9.Degree}, Quality={recipeV7b9.Quality}, Extension={recipeV7b9.Extension}, " +
+                             $"SeventhQuality={recipeV7b9.SeventhQuality}, TensionFlat9={recipeV7b9.RequestedExtensions.TensionFlat9}");
+                return;
+            }
+
+            // Verify Vb9 was normalized to include 7th
+            if (recipeVb9.Extension != ChordExtension.Seventh || recipeVb9.SeventhQuality != SeventhQuality.Dominant7)
+            {
+                Debug.LogError($"Vb9 was not normalized: Extension={recipeVb9.Extension}, SeventhQuality={recipeVb9.SeventhQuality} " +
+                             $"(expected Extension=Seventh, SeventhQuality=Dominant7)");
+                return;
+            }
+
+            // Verify b9 tension is present
+            if (!recipeVb9.RequestedExtensions.TensionFlat9)
+            {
+                Debug.LogError("Vb9 does not have TensionFlat9 flag set");
+                return;
+            }
+
+            // Get chord tone pitch classes for both
+            var chordEventVb9 = new ChordEvent { Key = key, Recipe = recipeVb9 };
+            var chordEventV7b9 = new ChordEvent { Key = key, Recipe = recipeV7b9 };
+            
+            var chordTonePcsVb9 = TheoryVoicing.GetChordTonePitchClasses(chordEventVb9);
+            var chordTonePcsV7b9 = TheoryVoicing.GetChordTonePitchClasses(chordEventV7b9);
+
+            // Verify chord tone pitch classes match
+            if (chordTonePcsVb9.Count != chordTonePcsV7b9.Count)
+            {
+                Debug.LogError($"Chord tone PC count mismatch: Vb9={chordTonePcsVb9.Count}, V7b9={chordTonePcsV7b9.Count}");
+                return;
+            }
+
+            bool pcsMatch = true;
+            for (int i = 0; i < chordTonePcsVb9.Count; i++)
+            {
+                if (chordTonePcsVb9[i] != chordTonePcsV7b9[i])
+                {
+                    pcsMatch = false;
+                    break;
+                }
+            }
+
+            if (!pcsMatch)
+            {
+                Debug.LogError($"Chord tone PCs don't match:\n" +
+                             $"  Vb9:  [{string.Join(", ", chordTonePcsVb9)}]\n" +
+                             $"  V7b9: [{string.Join(", ", chordTonePcsV7b9)}]");
+                return;
+            }
+
+            Debug.Log($"✓ Vb9 normalization test PASSED:\n" +
+                     $"  Vb9 recipe:  Degree={recipeVb9.Degree}, Extension={recipeVb9.Extension}, " +
+                     $"SeventhQuality={recipeVb9.SeventhQuality}, TensionFlat9={recipeVb9.RequestedExtensions.TensionFlat9}\n" +
+                     $"  V7b9 recipe: Degree={recipeV7b9.Degree}, Extension={recipeV7b9.Extension}, " +
+                     $"SeventhQuality={recipeV7b9.SeventhQuality}, TensionFlat9={recipeV7b9.RequestedExtensions.TensionFlat9}\n" +
+                     $"  Chord tone PCs: [{string.Join(", ", chordTonePcsVb9)}]");
+        }
+
+        /// <summary>
+        /// Tests that "V#9" is normalized to "V7#9" (dominant + #9 implies 7th).
+        /// Verifies that both produce the same chord recipe and voicing behavior.
+        /// </summary>
+        public static void TestVSharp9Normalization()
+        {
+            Debug.Log("=== TheoryChord: V#9 Normalization Test ===");
+            var key = new TheoryKey(ScaleMode.Ionian);
+
+            // Parse both variants
+            if (!TheoryChord.TryParseRomanNumeral(key, "V#9", out var recipeVSharp9))
+            {
+                Debug.LogError("Failed to parse 'V#9'");
+                return;
+            }
+
+            if (!TheoryChord.TryParseRomanNumeral(key, "V7#9", out var recipeV7Sharp9))
+            {
+                Debug.LogError("Failed to parse 'V7#9'");
+                return;
+            }
+
+            // Verify they produce the same recipe
+            bool recipesMatch = recipeVSharp9.Degree == recipeV7Sharp9.Degree &&
+                               recipeVSharp9.Quality == recipeV7Sharp9.Quality &&
+                               recipeVSharp9.Extension == recipeV7Sharp9.Extension &&
+                               recipeVSharp9.SeventhQuality == recipeV7Sharp9.SeventhQuality &&
+                               recipeVSharp9.RequestedExtensions.TensionSharp9 == recipeV7Sharp9.RequestedExtensions.TensionSharp9 &&
+                               recipeVSharp9.RequestedExtensions.Tension9 == recipeV7Sharp9.RequestedExtensions.Tension9 &&
+                               recipeVSharp9.RequestedExtensions.TensionFlat9 == recipeV7Sharp9.RequestedExtensions.TensionFlat9;
+
+            if (!recipesMatch)
+            {
+                Debug.LogError($"V#9 and V7#9 produce different recipes:\n" +
+                             $"  V#9:  Degree={recipeVSharp9.Degree}, Quality={recipeVSharp9.Quality}, Extension={recipeVSharp9.Extension}, " +
+                             $"SeventhQuality={recipeVSharp9.SeventhQuality}, TensionSharp9={recipeVSharp9.RequestedExtensions.TensionSharp9}\n" +
+                             $"  V7#9: Degree={recipeV7Sharp9.Degree}, Quality={recipeV7Sharp9.Quality}, Extension={recipeV7Sharp9.Extension}, " +
+                             $"SeventhQuality={recipeV7Sharp9.SeventhQuality}, TensionSharp9={recipeV7Sharp9.RequestedExtensions.TensionSharp9}");
+                return;
+            }
+
+            // Verify V#9 was normalized to include 7th
+            if (recipeVSharp9.Extension != ChordExtension.Seventh || recipeVSharp9.SeventhQuality != SeventhQuality.Dominant7)
+            {
+                Debug.LogError($"V#9 was not normalized: Extension={recipeVSharp9.Extension}, SeventhQuality={recipeVSharp9.SeventhQuality} " +
+                             $"(expected Extension=Seventh, SeventhQuality=Dominant7)");
+                return;
+            }
+
+            // Verify #9 tension is present
+            if (!recipeVSharp9.RequestedExtensions.TensionSharp9)
+            {
+                Debug.LogError("V#9 does not have TensionSharp9 flag set");
+                return;
+            }
+
+            // Get chord tone pitch classes for both
+            var chordEventVSharp9 = new ChordEvent { Key = key, Recipe = recipeVSharp9 };
+            var chordEventV7Sharp9 = new ChordEvent { Key = key, Recipe = recipeV7Sharp9 };
+
+            var chordTonePcsVSharp9 = TheoryVoicing.GetChordTonePitchClasses(chordEventVSharp9);
+            var chordTonePcsV7Sharp9 = TheoryVoicing.GetChordTonePitchClasses(chordEventV7Sharp9);
+
+            // Verify chord tone pitch classes match
+            if (chordTonePcsVSharp9.Count != chordTonePcsV7Sharp9.Count)
+            {
+                Debug.LogError($"Chord tone PC count mismatch: V#9={chordTonePcsVSharp9.Count}, V7#9={chordTonePcsV7Sharp9.Count}");
+                return;
+            }
+
+            bool pcsMatch = true;
+            for (int i = 0; i < chordTonePcsVSharp9.Count; i++)
+            {
+                if (chordTonePcsVSharp9[i] != chordTonePcsV7Sharp9[i])
+                {
+                    pcsMatch = false;
+                    break;
+                }
+            }
+
+            if (!pcsMatch)
+            {
+                Debug.LogError($"Chord tone PCs don't match:\n" +
+                             $"  V#9:  [{string.Join(", ", chordTonePcsVSharp9)}]\n" +
+                             $"  V7#9: [{string.Join(", ", chordTonePcsV7Sharp9)}]");
+                return;
+            }
+
+            Debug.Log($"✓ V#9 normalization test PASSED:\n" +
+                     $"  V#9 recipe:  Degree={recipeVSharp9.Degree}, Extension={recipeVSharp9.Extension}, " +
+                     $"SeventhQuality={recipeVSharp9.SeventhQuality}, TensionSharp9={recipeVSharp9.RequestedExtensions.TensionSharp9}\n" +
+                     $"  V7#9 recipe: Degree={recipeV7Sharp9.Degree}, Extension={recipeV7Sharp9.Extension}, " +
+                     $"SeventhQuality={recipeV7Sharp9.SeventhQuality}, TensionSharp9={recipeV7Sharp9.RequestedExtensions.TensionSharp9}\n" +
+                     $"  Chord tone PCs: [{string.Join(", ", chordTonePcsVSharp9)}]");
+        }
     }
 }
 

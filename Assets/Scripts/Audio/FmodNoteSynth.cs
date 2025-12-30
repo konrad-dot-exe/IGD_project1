@@ -44,6 +44,10 @@ public class FmodNoteSynth : MonoBehaviour
     // simple polyphony: one instance per MIDI note
     private readonly Dictionary<int, EventInstance> _voices = new();
     private readonly Dictionary<int, float> _noteStartTimes = new(); // Track when each note was started
+    
+    // Debug logging counters
+    private static int logCount = 0;
+    private static int detailedLogCount = 0;
 
     /// <summary>
     /// Finds the best sample to use for a given MIDI note, minimizing pitch-shifting.
@@ -106,15 +110,43 @@ public class FmodNoteSynth : MonoBehaviour
         return false;
     }
 
-    public void NoteOn(int midi, float velocity = -1f)
+    // PlaybackAudit: Callback to notify about note-on/note-off events (OBSERVATIONAL ONLY - no side effects)
+    public System.Action<int, EventInstance, bool> OnNoteEvent; // midi, instance, isNoteOn
+
+    /// <summary>
+    /// NoteOn returns the EventInstance handle for external tracking.
+    /// Caller is responsible for managing instance lifecycle.
+    /// </summary>
+    public EventInstance NoteOn(int midi, float velocity = -1f)
     {
-        if (_voices.ContainsKey(midi)) return;       // already sounding
+        // DEBUG: Trace all A6 (midi=93) NoteOn calls to identify duplicate triggers
+        if (midi == 93) // A6 for this test
+        {
+            UnityEngine.Debug.Log($"[NOTEON_TRACE] A6 NoteOn called. " +
+                      $"time={Time.time:F4} " +
+                      $"midi={midi} " +
+                      $"vel={velocity:F3}\n" +
+                      $"{System.Environment.StackTrace}");
+        }
+        
+        EventInstance invalidInstance = default(EventInstance);
+        
+        // NOTE: We no longer auto-stop existing notes here. The caller (ChordLabController) 
+        // is responsible for stopping previous region voices before starting new ones.
+        // This allows proper region transition control and prevents stopping new voices immediately.
+        
+        // Only skip if the EXACT same MIDI is already active (shouldn't happen with proper region management)
+        if (_voices.ContainsKey(midi))
+        {
+            if (debugLogs) Debug.LogWarning($"[FmodNoteSynth] MIDI {midi} already sounding - caller should have stopped it. Skipping new NoteOn.");
+            return invalidInstance; // Skip rather than stop, let caller manage region transitions
+        }
 
         // Find the best sample for this MIDI note
         if (!FindBestSample(midi, out EventReference eventRef, out int sampleRootMidi, out float pitchRatio))
         {
             if (debugLogs) Debug.LogError($"[FmodNoteSynth] No valid sample found for MIDI note {midi}");
-            return;
+            return invalidInstance;
         }
 
         float noteStartTime = Time.realtimeSinceStartup;
@@ -123,7 +155,7 @@ public class FmodNoteSynth : MonoBehaviour
         if (!inst.isValid())
         {
             if (debugLogs) Debug.LogWarning($"[FmodNoteSynth] Failed to create instance for MIDI note {midi}");
-            return;
+            return invalidInstance;
         }
 
         // optional 3D attach
@@ -139,14 +171,19 @@ public class FmodNoteSynth : MonoBehaviour
         inst.setVolume(v);
 
         // Check event description for potential delays before starting
-        if (debugLogs)
+        // REDUCED: Only log if debugLogs AND not during playback (to reduce FMOD starvation)
+        if (debugLogs && Time.timeScale > 0f) // Only log when not paused
         {
             inst.getDescription(out EventDescription desc);
             if (desc.isValid())
             {
                 desc.getLength(out int lengthMs);
                 desc.getMinMaxDistance(out float minDist, out float maxDist);
-                Debug.Log($"[FmodNoteSynth] Event description: Length={lengthMs}ms, MinDist={minDist:F2}, MaxDist={maxDist:F2}");
+                // Reduced logging frequency - only log first few notes
+                if (logCount++ < 3)
+                {
+                    Debug.Log($"[FmodNoteSynth] Event description: Length={lengthMs}ms, MinDist={minDist:F2}, MaxDist={maxDist:F2}");
+                }
             }
         }
 
@@ -157,7 +194,14 @@ public class FmodNoteSynth : MonoBehaviour
         _voices[midi] = inst;
         _noteStartTimes[midi] = noteStartTime;
 
-        if (debugLogs)
+        // PlaybackAudit: Notify callback
+        if (OnNoteEvent != null)
+        {
+            OnNoteEvent(midi, inst, true);
+        }
+
+        // REDUCED: Only log detailed timing if debugLogs enabled AND first few notes
+        if (debugLogs && detailedLogCount++ < 5)
         {
             float semitone = midi - sampleRootMidi;
             Debug.Log($"[FmodNoteSynth] NoteOn: MIDI={midi}, SampleRootMidi={sampleRootMidi}, " +
@@ -166,11 +210,13 @@ public class FmodNoteSynth : MonoBehaviour
                      $"start() took {(afterStartTime - beforeStartTime) * 1000:F2}ms");
         }
 
-        // Start coroutine to monitor when playback actually begins
-        if (debugLogs)
+        // Start coroutine to monitor when playback actually begins (only if debugLogs enabled)
+        if (debugLogs && detailedLogCount < 3) // Only monitor first 3 notes
         {
             StartCoroutine(MonitorPlaybackStart(midi, inst, noteStartTime, pitchRatio));
         }
+        
+        return inst; // Return instance for caller tracking
     }
 
     /// <summary>
@@ -306,28 +352,80 @@ public class FmodNoteSynth : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// NoteOff by MIDI (legacy - use NoteOffByInstance when possible for accuracy)
+    /// </summary>
     public void NoteOff(int midi)
     {
         if (!_voices.TryGetValue(midi, out var inst)) return;
-        if (inst.isValid())
+        NoteOffByInstance(inst, midi);
+    }
+    
+    /// <summary>
+    /// NoteOff by instance handle - more accurate than MIDI lookup
+    /// </summary>
+    public void NoteOffByInstance(EventInstance instance, int midiForLogging = -1)
+    {
+        if (!instance.isValid()) return;
+        
+        // Find MIDI if not provided (for logging/callback)
+        int midi = midiForLogging;
+        if (midi < 0)
         {
-            inst.stop(FMOD.Studio.STOP_MODE.ALLOWFADEOUT);  // uses the event's release tail
-            inst.release();
+            // Try to find MIDI from _voices by matching instance handle
+            foreach (var kv in _voices)
+            {
+                if (kv.Value.handle == instance.handle)
+                {
+                    midi = kv.Key;
+                    break;
+                }
+            }
         }
-        _voices.Remove(midi);
-        _noteStartTimes.Remove(midi); // Clean up tracking
+        
+        // PlaybackAudit: Notify callback (OBSERVATIONAL ONLY - callback must not modify state)
+        if (OnNoteEvent != null && midi >= 0)
+        {
+            OnNoteEvent(midi, instance, false);
+        }
+        
+        instance.stop(FMOD.Studio.STOP_MODE.ALLOWFADEOUT);  // uses the event's release tail
+        instance.release();
+        
+        // Remove from tracking if we found it
+        if (midi >= 0 && _voices.ContainsKey(midi))
+        {
+            _voices.Remove(midi);
+            _noteStartTimes.Remove(midi);
+        }
     }
 
     public void PlayOnce(int midi, float velocity, float durationSeconds)
     {
-        NoteOn(midi, velocity);
-        StartCoroutine(ReleaseAfter(midi, durationSeconds));
+        var instance = NoteOn(midi, velocity);
+        if (instance.isValid())
+        {
+            StartCoroutine(ReleaseAfter(instance, midi, durationSeconds));
+        }
+    }
+    
+    /// <summary>
+    /// PlayOnce that returns the instance for external tracking
+    /// </summary>
+    public EventInstance PlayOnceWithInstance(int midi, float velocity, float durationSeconds)
+    {
+        var instance = NoteOn(midi, velocity);
+        if (instance.isValid())
+        {
+            StartCoroutine(ReleaseAfter(instance, midi, durationSeconds));
+        }
+        return instance;
     }
 
-    System.Collections.IEnumerator ReleaseAfter(int midi, float s)
+    System.Collections.IEnumerator ReleaseAfter(EventInstance instance, int midi, float s)
     {
         yield return new WaitForSeconds(s);
-        NoteOff(midi);
+        NoteOffByInstance(instance, midi);
     }
 
     public void StopAll()

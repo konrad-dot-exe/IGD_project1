@@ -102,13 +102,16 @@
 			<value>-80</value>
 		</property>
 		<property name="attackTime">
-			<value>360</value>
+			<value>320</value>
+		</property>
+		<property name="holdTime">
+			<value>0</value>
 		</property>
 		<property name="decayTime">
-			<value>1400</value>
+			<value>4200</value>
 		</property>
 		<property name="sustainValue">
-			<value>-1</value>
+			<value>-80</value>
 		</property>
 		<property name="releaseTime">
 			<value>3200</value>

@@ -227,6 +227,22 @@ namespace Sonoria.MusicTheory
     /// Represents a chord recipe (degree + quality + extension).
     /// Used to build chords from a TheoryKey.
     /// </summary>
+    /// <summary>
+    /// Lightweight representation of requested chord extensions from user input.
+    /// </summary>
+    public struct RequestedExtensions
+    {
+        public bool Sus4 { get; set; }
+        public bool Add9 { get; set; }
+        public bool Add11 { get; set; }
+        public bool Tension9 { get; set; }
+        public bool TensionFlat9 { get; set; }
+        public bool TensionSharp9 { get; set; }
+        public bool TensionSharp11 { get; set; }
+        
+        public bool HasAny => Sus4 || Add9 || Add11 || Tension9 || TensionFlat9 || TensionSharp9 || TensionSharp11;
+    }
+
     public readonly struct ChordRecipe
     {
         public int Degree { get; }               // 1..7
@@ -247,6 +263,11 @@ namespace Sonoria.MusicTheory
         /// Chord inversion (voicing position). Root = 0, First = 1, Second = 2, Third = 3.
         /// </summary>
         public ChordInversion Inversion { get; }
+        
+        /// <summary>
+        /// Requested extensions from user input (sus4, add9, add11, 9, b9, #11).
+        /// </summary>
+        public RequestedExtensions RequestedExtensions { get; }
 
         public ChordRecipe(
             int degree,
@@ -254,7 +275,8 @@ namespace Sonoria.MusicTheory
             ChordExtension extension = ChordExtension.None,
             int rootSemitoneOffset = 0,
             SeventhQuality seventhQuality = SeventhQuality.None,
-            ChordInversion inversion = ChordInversion.Root)
+            ChordInversion inversion = ChordInversion.Root,
+            RequestedExtensions requestedExtensions = default)
         {
             Degree = degree;
             Quality = quality;
@@ -262,6 +284,7 @@ namespace Sonoria.MusicTheory
             RootSemitoneOffset = rootSemitoneOffset;
             SeventhQuality = seventhQuality;
             Inversion = inversion;
+            RequestedExtensions = requestedExtensions;
         }
 
         public override string ToString() => $"Degree {Degree}, {Quality}, {Extension}, Offset {RootSemitoneOffset}, Inversion {Inversion}";
@@ -323,10 +346,14 @@ namespace Sonoria.MusicTheory
             }
 
             // Build triad
+            // Handle sus4: replace 3rd with 4th (5 semitones) when requested
+            bool hasSus4 = recipe.RequestedExtensions.Sus4;
+            int noteToUse = hasSus4 ? 5 : thirdInterval; // 4th = 5 semitones, 3rd = 3 or 4 semitones
+            
             var midiNotes = new List<int>(4)
             {
                 rootMidi,
-                rootMidi + thirdInterval,
+                rootMidi + noteToUse, // Use 4th if sus4, otherwise 3rd
                 rootMidi + fifthInterval
             };
 
@@ -480,9 +507,23 @@ namespace Sonoria.MusicTheory
                 normalized = normalized.Substring(0, slashIndex); // Keep part before '/' for existing parsing
             }
 
-            // Optional: accept "vii°" as alias for "viidim" (7th handled by explicit suffix logic below)
+            // Pre-normalize: maj9 → maj79 (maj7 + 9 extension)
+            // This must happen before we start parsing, so "Imaj9" becomes "Imaj79"
+            if (normalized.EndsWith("maj9", StringComparison.OrdinalIgnoreCase))
+            {
+                normalized = normalized.Substring(0, normalized.Length - 4) + "maj79";
+            }
+
+            // Optional: accept "vii°" and "viio" as aliases for "viidim" (7th handled by explicit suffix logic below)
+            // Check for "°" first (degree symbol), then check for trailing lowercase 'o' (but not 'o7' which is already handled)
             if (normalized.EndsWith("°", StringComparison.Ordinal))
             {
+                normalized = normalized.Substring(0, normalized.Length - 1) + "dim";
+            }
+            else if (normalized.EndsWith("o", StringComparison.OrdinalIgnoreCase) && 
+                     !normalized.EndsWith("o7", StringComparison.OrdinalIgnoreCase))
+            {
+                // Handle "viio" (lowercase 'o' for diminished triad, but not "o7" which is already handled above)
                 normalized = normalized.Substring(0, normalized.Length - 1) + "dim";
             }
 
@@ -490,70 +531,172 @@ namespace Sonoria.MusicTheory
             ChordExtension extension = ChordExtension.None;
             ChordQuality quality = ChordQuality.Major; // default
             SeventhQuality seventhQuality = SeventhQuality.None;
-            string baseNumeral = normalized;
+            
+            // Suffix-peeling approach: extract extensions from the end (longest-first)
+            // until we get a valid Roman numeral core
+            string workingString = normalized;
+            RequestedExtensions requested = default;
+            
+            // Define extension suffixes to peel (longest first to avoid partial matches)
+            var extensionSuffixes = new[]
+            {
+                ("7sus4", "7sus4"),
+                ("sus4", "sus4"),
+                ("add11", "add11"),
+                ("add9", "add9"),
+                ("#11", "#11"),
+                ("#9", "#9"),
+                ("b9", "b9"),
+                ("9", "9")
+            };
+            
+            bool continuePeeling = true;
+            while (continuePeeling && workingString.Length > 0)
+            {
+                bool foundSuffix = false;
+                string suffixLower = workingString.ToLowerInvariant();
+                
+                foreach (var (suffix, suffixKey) in extensionSuffixes)
+                {
+                    string suffixToCheck = suffix.ToLowerInvariant();
+                    if (suffixLower.EndsWith(suffixToCheck))
+                    {
+                        // Found an extension suffix - peel it off and parse it
+                        workingString = workingString.Substring(0, workingString.Length - suffix.Length);
+                        foundSuffix = true;
+                        
+                        // Special handling: "7sus4" should set both 7th marker and sus4
+                        if (suffix == "7sus4")
+                        {
+                            extension = ChordExtension.Seventh;
+                            seventhQuality = SeventhQuality.Dominant7; // Will be adjusted later if needed
+                            // Sus4 will be set by TryParseRequestedExtensions below
+                        }
+                        
+                        // Debug logging: show extensionSuffix being passed to TryParseRequestedExtensions
+                        if (UnityEngine.Debug.isDebugBuild)
+                        {
+                            UnityEngine.Debug.Log($"[RomanParse] Passing extensionSuffix='{suffix}' to TryParseRequestedExtensions(), remaining core='{workingString}'");
+                        }
+                        
+                        // Parse the suffix using TryParseRequestedExtensions
+                        // This ensures identical behavior with absolute chord symbol parsing
+                        if (!TryParseRequestedExtensions(suffix, ref requested, out string extError))
+                        {
+                            // Log debug info if parsing fails
+                            if (UnityEngine.Debug.isDebugBuild)
+                            {
+                                UnityEngine.Debug.LogWarning($"[RomanParse] Extension suffix '{suffix}' parsing failed: {extError}");
+                            }
+                        }
+                        else
+                        {
+                            // Log successful parsing
+                            if (UnityEngine.Debug.isDebugBuild)
+                            {
+                                UnityEngine.Debug.Log($"[RomanParse] Successfully parsed extension suffix '{suffix}'");
+                            }
+                        }
+                        break; // Found a suffix, restart the loop to check for more
+                    }
+                }
+                
+                if (!foundSuffix)
+                {
+                    // No more extension suffixes found, stop peeling
+                    continuePeeling = false;
+                }
+            }
+            
+            // Debug logging: show final extension suffix passed to TryParseRequestedExtensions
+            // (We've already parsed it above, but log what we collected)
+            if (UnityEngine.Debug.isDebugBuild)
+            {
+                var extList = new System.Collections.Generic.List<string>();
+                if (requested.Sus4) extList.Add("sus4");
+                if (requested.Add9) extList.Add("add9");
+                if (requested.Add11) extList.Add("add11");
+                if (requested.Tension9) extList.Add("9");
+                if (requested.TensionFlat9) extList.Add("b9");
+                if (requested.TensionSharp9) extList.Add("#9");
+                if (requested.TensionSharp11) extList.Add("#11");
+                string extSummary = extList.Count > 0 ? string.Join(",", extList) : "none";
+                UnityEngine.Debug.Log($"[RomanParse] Final RequestedExtensions from suffix peeling: {extSummary}");
+            }
+            
+            // Now workingString should contain only the core: Roman numeral + quality/7th markers
+            // Continue with existing 7th and quality parsing logic
+            string baseNumeral = workingString;
 
+            // Now parse 7th and quality markers from the core (extensions already peeled)
             // First, detect explicit 7th-quality suffixes (order of precedence):
             // maj7, hdim7 (half-dim), dim7/o7 (fully-dim), ø7/m7b5 (half-dim), m7, plain 7.
             // Note: hdim7 must be checked before dim7 to avoid false matches.
-            if (normalized.EndsWith("maj7", StringComparison.OrdinalIgnoreCase))
+            if (baseNumeral.EndsWith("maj7", StringComparison.OrdinalIgnoreCase))
             {
                 seventhQuality = SeventhQuality.Major7;
                 extension = ChordExtension.Seventh;
-                baseNumeral = normalized.Substring(0, normalized.Length - 4);
+                baseNumeral = baseNumeral.Substring(0, baseNumeral.Length - 4);
             }
-            else if (normalized.EndsWith("hdim7", StringComparison.OrdinalIgnoreCase))
+            else if (baseNumeral.EndsWith("hdim7", StringComparison.OrdinalIgnoreCase))
             {
                 seventhQuality = SeventhQuality.HalfDiminished7;
                 extension = ChordExtension.Seventh;
-                baseNumeral = normalized.Substring(0, normalized.Length - 5);
+                baseNumeral = baseNumeral.Substring(0, baseNumeral.Length - 5);
             }
-            else if (normalized.EndsWith("dim7", StringComparison.OrdinalIgnoreCase) ||
-                     normalized.EndsWith("o7", StringComparison.OrdinalIgnoreCase))
+            else if (baseNumeral.EndsWith("dim7", StringComparison.OrdinalIgnoreCase) ||
+                     baseNumeral.EndsWith("o7", StringComparison.OrdinalIgnoreCase))
             {
                 seventhQuality = SeventhQuality.Diminished7;
                 extension = ChordExtension.Seventh;
                 // dim7 is 4 chars, o7 is 2 chars
-                if (normalized.EndsWith("dim7", StringComparison.OrdinalIgnoreCase))
-                    baseNumeral = normalized.Substring(0, normalized.Length - 4);
+                if (baseNumeral.EndsWith("dim7", StringComparison.OrdinalIgnoreCase))
+                {
+                    baseNumeral = baseNumeral.Substring(0, baseNumeral.Length - 4);
+                }
                 else
-                    baseNumeral = normalized.Substring(0, normalized.Length - 2);
+                {
+                    baseNumeral = baseNumeral.Substring(0, baseNumeral.Length - 2);
+                }
             }
-            else if (normalized.EndsWith("ø7", StringComparison.Ordinal) ||
-                     normalized.EndsWith("m7b5", StringComparison.OrdinalIgnoreCase))
+            else if (baseNumeral.EndsWith("ø7", StringComparison.Ordinal) ||
+                     baseNumeral.EndsWith("m7b5", StringComparison.OrdinalIgnoreCase))
             {
                 seventhQuality = SeventhQuality.HalfDiminished7;
                 extension = ChordExtension.Seventh;
-                if (normalized.EndsWith("ø7", StringComparison.Ordinal))
-                    baseNumeral = normalized.Substring(0, normalized.Length - 2);
+                if (baseNumeral.EndsWith("ø7", StringComparison.Ordinal))
+                {
+                    baseNumeral = baseNumeral.Substring(0, baseNumeral.Length - 2);
+                }
                 else
-                    baseNumeral = normalized.Substring(0, normalized.Length - 4);
+                {
+                    baseNumeral = baseNumeral.Substring(0, baseNumeral.Length - 4);
+                }
             }
-            else if (normalized.EndsWith("m7", StringComparison.OrdinalIgnoreCase))
+            else if (baseNumeral.EndsWith("m7", StringComparison.OrdinalIgnoreCase))
             {
                 seventhQuality = SeventhQuality.Minor7;
                 extension = ChordExtension.Seventh;
-                baseNumeral = normalized.Substring(0, normalized.Length - 2);
+                baseNumeral = baseNumeral.Substring(0, baseNumeral.Length - 2);
             }
-            else if (normalized.EndsWith("7", StringComparison.Ordinal))
+            else if (baseNumeral.EndsWith("7", StringComparison.Ordinal))
             {
                 seventhQuality = SeventhQuality.Dominant7;
                 extension = ChordExtension.Seventh;
-                baseNumeral = normalized.Substring(0, normalized.Length - 1);
+                baseNumeral = baseNumeral.Substring(0, baseNumeral.Length - 1);
             }
 
             // Now detect triad quality suffixes on the remaining base numeral.
-            normalized = baseNumeral;
-
             // Parse triad-quality suffixes in order: dim, aug.
-            if (normalized.EndsWith("dim", StringComparison.OrdinalIgnoreCase))
+            if (baseNumeral.EndsWith("dim", StringComparison.OrdinalIgnoreCase))
             {
                 quality = ChordQuality.Diminished;
-                baseNumeral = normalized.Substring(0, normalized.Length - 3);
+                baseNumeral = baseNumeral.Substring(0, baseNumeral.Length - 3);
             }
-            else if (normalized.EndsWith("aug", StringComparison.OrdinalIgnoreCase))
+            else if (baseNumeral.EndsWith("aug", StringComparison.OrdinalIgnoreCase))
             {
                 quality = ChordQuality.Augmented;
-                baseNumeral = normalized.Substring(0, normalized.Length - 3);
+                baseNumeral = baseNumeral.Substring(0, baseNumeral.Length - 3);
             }
 
             // Determine quality from case if not already set by suffix
@@ -654,9 +797,680 @@ namespace Sonoria.MusicTheory
                 finalRootOffset = rootOffset;
             }
 
-            // Create recipe with parsed degree, quality, extension, seventh quality, root offset, and inversion.
-            recipe = new ChordRecipe(degree, quality, extension, finalRootOffset, seventhQuality, inversion);
+            // Extensions have already been parsed during the suffix-peeling loop above
+            // The RequestedExtensions struct is already populated, so we can use it directly
+
+            // NORMALIZATION: For dominant chords (V), explicit 9/11/13 alterations imply a 7th unless explicitly specified otherwise
+            // This normalizes "Vb9" → "V7b9", "V9" → "V7", "V#9" → "V7#9", "V#11" → "V7#11", etc.
+            // Only applies when:
+            // 1. Degree is V (dominant, degree 5)
+            // 2. No explicit 7th extension was specified (extension == None)
+            // 3. At least one extension alteration is present (b9, 9, #9, #11, or future 13)
+            if (degree == 5 && extension == ChordExtension.None)
+            {
+                bool hasExtensionAlteration = requested.TensionFlat9 || requested.Tension9 || 
+                                             requested.TensionSharp9 || requested.TensionSharp11;
+                
+                if (hasExtensionAlteration)
+                {
+                    // Implicit 7th: dominant + extension alteration → dominant 7th
+                    extension = ChordExtension.Seventh;
+                    seventhQuality = SeventhQuality.Dominant7;
+                }
+            }
+
+            // Create recipe with parsed degree, quality, extension, seventh quality, root offset, inversion, and requested extensions.
+            recipe = new ChordRecipe(degree, quality, extension, finalRootOffset, seventhQuality, inversion, requested);
             return true;
+        }
+
+        /// <summary>
+        /// Parses a chord symbol (lead sheet style) into a ChordRecipe.
+        /// Supports triads: "C", "Cm", "F#", "Eb", "Bb", "Gm", "Bdim", "C°", "Eaug", "E+"
+        /// Supports 7ths: "C7", "Cmaj7", "CM7", "Cm7", "Am7", "Bm7b5", "Bø7", "Bdim7"
+        /// Supports slash chords: "C/E", "Am/C", "G7/B", "Dm/F"
+        /// </summary>
+        /// <param name="key">The key context (used for finding closest degree and enharmonic spelling)</param>
+        /// <param name="raw">Chord symbol string to parse (e.g., "C", "Am7", "G7/B")</param>
+        /// <param name="recipe">Output recipe if parsing succeeds</param>
+        /// <param name="errorMessage">Output error message if parsing fails</param>
+        /// <returns>True if parsing succeeded, false otherwise</returns>
+        public static bool TryParseChordSymbol(TheoryKey key, string raw, out ChordRecipe recipe, out string errorMessage)
+        {
+            recipe = default;
+            errorMessage = null;
+
+            // Null/empty check
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                errorMessage = "Chord symbol is empty";
+                return false;
+            }
+
+            // Normalize: trim whitespace and convert Unicode accidentals
+            string normalized = raw.Trim()
+                .Replace("♯", "#")
+                .Replace("♭", "b");
+
+            // Extract slash chord bass note if present
+            string bassNoteName = null;
+            int slashIndex = normalized.IndexOf('/');
+            if (slashIndex >= 0)
+            {
+                bassNoteName = normalized.Substring(slashIndex + 1).Trim();
+                normalized = normalized.Substring(0, slashIndex).Trim();
+                
+                if (string.IsNullOrEmpty(bassNoteName))
+                {
+                    errorMessage = "Slash chord missing bass note (e.g., 'C/' should be 'C/E')";
+                    return false;
+                }
+            }
+
+            // Parse root note name to pitch class
+            if (!TryParseNoteNameToPitchClass(normalized, out int rootPc, out string rootNoteName, out string remainingSuffix))
+            {
+                errorMessage = $"Invalid root note name in '{raw}'";
+                return false;
+            }
+
+            // Extract accidental hint from the parsed root note name
+            AccidentalHint accidentalHint = AccidentalHint.None;
+            if (!string.IsNullOrEmpty(rootNoteName))
+            {
+                if (rootNoteName.EndsWith("b", System.StringComparison.OrdinalIgnoreCase) || 
+                    rootNoteName.EndsWith("♭", System.StringComparison.Ordinal))
+                {
+                    accidentalHint = AccidentalHint.Flat;
+                }
+                else if (rootNoteName.EndsWith("#", System.StringComparison.Ordinal) || 
+                         rootNoteName.EndsWith("♯", System.StringComparison.Ordinal))
+                {
+                    accidentalHint = AccidentalHint.Sharp;
+                }
+                else
+                {
+                    accidentalHint = AccidentalHint.Natural;
+                }
+            }
+
+            // Find closest degree and offset in the key (using accidental hint to break ties)
+            if (!FindClosestDegree(key, rootPc, accidentalHint, out int degree, out int rootOffset))
+            {
+                errorMessage = $"Could not map root note '{rootNoteName}' to a scale degree in key {key}";
+                return false;
+            }
+
+            // Parse quality and 7th extension from remaining suffix
+            ChordQuality quality = ChordQuality.Major; // default
+            ChordExtension extension = ChordExtension.None;
+            SeventhQuality seventhQuality = SeventhQuality.None;
+
+            if (!TryParseQualityAndExtension(remainingSuffix, ref quality, ref extension, ref seventhQuality, out string qualityError))
+            {
+                errorMessage = qualityError ?? $"Invalid quality/extension suffix in '{raw}'";
+                return false;
+            }
+
+            // Parse requested extensions (sus4, add9, add11, 9, b9, #11)
+            RequestedExtensions requested = default;
+            string remainingAfterQuality = remainingSuffix; // We'll extract extensions from what's left after quality parsing
+            // Note: TryParseQualityAndExtension modifies remainingSuffix, so we need to re-parse from original
+            // Actually, we should parse extensions from the original remainingSuffix before quality parsing
+            // Let's do it after quality parsing but check the original suffix for extension patterns
+            if (!TryParseRequestedExtensions(remainingSuffix, ref requested, out string extensionError))
+            {
+                // Extensions are optional - if parsing fails, just continue (extensions are optional)
+            }
+
+            // Parse slash chord bass note to determine inversion
+            ChordInversion inversion = ChordInversion.Root;
+            if (bassNoteName != null)
+            {
+                if (!TryParseNoteNameToPitchClass(bassNoteName, out int bassPc, out _, out _))
+                {
+                    errorMessage = $"Invalid bass note name '{bassNoteName}' in slash chord '{raw}'";
+                    return false;
+                }
+
+                // Determine which chord tone the bass corresponds to
+                if (!DetermineInversionFromBass(rootPc, quality, extension, seventhQuality, bassPc, out inversion))
+                {
+                    // Bass note is not a chord tone - for now, treat as root position with warning
+                    // (Could be enhanced later to support non-chord-tone bass)
+                    inversion = ChordInversion.Root;
+                    // Don't fail - just use root position
+                }
+            }
+
+            // Create recipe
+            recipe = new ChordRecipe(degree, quality, extension, rootOffset, seventhQuality, inversion, requested);
+            
+            // Trace: Log parsed extensions (gated by debug flag from TheoryVoicing)
+            // Note: stepIndex is not available here, so we'll trace at the call site where we have step info
+            // This is just the parsing point - full trace happens in VoiceNextChord
+            
+            return true;
+        }
+
+        /// <summary>
+        /// Parses a note name (e.g., "C", "Eb", "F#", "Bb") to a pitch class (0-11).
+        /// Also extracts the root note name and any remaining suffix.
+        /// </summary>
+        private static bool TryParseNoteNameToPitchClass(string input, out int pitchClass, out string rootNoteName, out string remainingSuffix)
+        {
+            pitchClass = 0;
+            rootNoteName = null;
+            remainingSuffix = null;
+
+            if (string.IsNullOrWhiteSpace(input))
+                return false;
+
+            input = input.Trim();
+            if (input.Length < 1)
+                return false;
+
+            // Parse letter (A-G)
+            char letter = char.ToUpperInvariant(input[0]);
+            if (letter < 'A' || letter > 'G')
+                return false;
+
+            int index = 1;
+            int accidentalOffset = 0;
+
+            // Parse accidental (# or b)
+            if (index < input.Length)
+            {
+                char acc = input[index];
+                if (acc == '#')
+                {
+                    accidentalOffset = 1;
+                    index++;
+                }
+                else if (acc == 'b')
+                {
+                    accidentalOffset = -1;
+                    index++;
+                }
+            }
+
+            // Map letter to base pitch class
+            int basePc = letter switch
+            {
+                'C' => 0,
+                'D' => 2,
+                'E' => 4,
+                'F' => 5,
+                'G' => 7,
+                'A' => 9,
+                'B' => 11,
+                _ => -1
+            };
+
+            if (basePc < 0)
+                return false;
+
+            // Calculate final pitch class
+            pitchClass = (basePc + accidentalOffset + 12) % 12;
+
+            // Extract root note name (letter + accidental)
+            rootNoteName = input.Substring(0, index);
+
+            // Remaining suffix is everything after the root note name
+            remainingSuffix = index < input.Length ? input.Substring(index) : string.Empty;
+
+            return true;
+        }
+
+        /// <summary>
+        /// Finds the closest scale degree (1-7) to a given pitch class in the key.
+        /// Returns the degree and the semitone offset needed to reach the pitch class.
+        /// When multiple degrees are equidistant, prefers the one that matches the accidental hint.
+        /// </summary>
+        private static bool FindClosestDegree(TheoryKey key, int targetPc, AccidentalHint accidentalHint, out int degree, out int offset)
+        {
+            degree = 1;
+            offset = 0;
+
+            // Get all diatonic pitch classes for the key
+            int bestDegree = 1;
+            int bestOffset = 0;
+            int bestAbsDiff = int.MaxValue;
+
+            for (int deg = 1; deg <= 7; deg++)
+            {
+                int diatonicPc = TheoryScale.GetDegreePitchClass(key, deg);
+                if (diatonicPc < 0)
+                    continue;
+
+                // Calculate semitone difference (normalize to -6..+6 range)
+                int diff = (targetPc - diatonicPc + 12) % 12;
+                if (diff > 6) diff -= 12;
+
+                int absDiff = System.Math.Abs(diff);
+                
+                // If this is a better match, or if it's equally good and matches the accidental hint better
+                bool isBetter = absDiff < bestAbsDiff;
+                bool isTie = (absDiff == bestAbsDiff);
+                
+                if (isTie)
+                {
+                    // Break tie based on accidental hint
+                    bool currentMatchesHint = (accidentalHint == AccidentalHint.Flat && diff < 0) ||
+                                             (accidentalHint == AccidentalHint.Sharp && diff > 0);
+                    bool bestMatchesHint = (accidentalHint == AccidentalHint.Flat && bestOffset < 0) ||
+                                          (accidentalHint == AccidentalHint.Sharp && bestOffset > 0);
+                    
+                    // Prefer the one that matches the hint, or if neither matches, prefer the one closer to zero
+                    if (currentMatchesHint && !bestMatchesHint)
+                    {
+                        isBetter = true;
+                    }
+                    else if (!currentMatchesHint && bestMatchesHint)
+                    {
+                        isBetter = false;
+                    }
+                    else
+                    {
+                        // Both match or neither matches - prefer the one with smaller absolute offset
+                        // (This should already be equal for a tie, but keep for consistency)
+                        isBetter = System.Math.Abs(diff) < System.Math.Abs(bestOffset);
+                    }
+                }
+                
+                if (isBetter)
+                {
+                    bestDegree = deg;
+                    bestOffset = diff;
+                    bestAbsDiff = absDiff;
+                }
+            }
+
+            if (bestAbsDiff == int.MaxValue)
+                return false;
+
+            degree = bestDegree;
+            offset = bestOffset;
+            return true;
+        }
+
+        /// <summary>
+        /// Parses quality and extension suffixes from a chord symbol suffix.
+        /// Examples: "m" → minor, "dim" → diminished, "7" → dominant 7th, "maj7" → major 7th.
+        /// </summary>
+        private static bool TryParseQualityAndExtension(string suffix, ref ChordQuality quality, ref ChordExtension extension, ref SeventhQuality seventhQuality, out string errorMessage)
+        {
+            errorMessage = null;
+
+            if (string.IsNullOrEmpty(suffix))
+            {
+                // No suffix = major triad (default)
+                return true;
+            }
+
+            string suffixLower = suffix.ToLowerInvariant();
+            
+            // First, detect 7th extensions (order matters - check longer/more specific patterns first)
+            // Check for maj7 (case-insensitive) or uppercase M7 (to distinguish from m7)
+            if (suffixLower.Contains("maj7") || (suffix.Contains("M7") && !suffixLower.Contains("m7")))
+            {
+                seventhQuality = SeventhQuality.Major7;
+                extension = ChordExtension.Seventh;
+                suffix = suffix.Replace("maj7", "").Replace("Maj7", "").Replace("MAJ7", "");
+                // Only remove M7 if it's uppercase (not part of m7)
+                if (suffix.Contains("M7"))
+                    suffix = suffix.Replace("M7", "");
+                suffixLower = suffix.ToLowerInvariant();
+            }
+            // Check for half-diminished (m7b5 or ø7) - before checking plain m7
+            else if (suffixLower.Contains("m7b5") || suffix.Contains("ø7"))
+            {
+                seventhQuality = SeventhQuality.HalfDiminished7;
+                extension = ChordExtension.Seventh;
+                quality = ChordQuality.Diminished; // Half-dim requires diminished triad
+                suffix = suffix.Replace("m7b5", "").Replace("M7b5", "").Replace("ø7", "");
+                suffixLower = suffix.ToLowerInvariant();
+            }
+            // Check for fully diminished 7th
+            else if (suffixLower.Contains("dim7") || suffix.Contains("°7"))
+            {
+                seventhQuality = SeventhQuality.Diminished7;
+                extension = ChordExtension.Seventh;
+                quality = ChordQuality.Diminished; // Fully dim requires diminished triad
+                suffix = suffix.Replace("dim7", "").Replace("Dim7", "").Replace("°7", "");
+                suffixLower = suffix.ToLowerInvariant();
+            }
+            // Check for minor 7th (m7) - lowercase m7, not uppercase M7
+            // Only match if it's actually "m7" (not "M7" which we handled above)
+            else if (suffixLower.Contains("m7") && !suffix.Contains("M7"))
+            {
+                seventhQuality = SeventhQuality.Minor7;
+                extension = ChordExtension.Seventh;
+                // For "Am7", the "m" indicates minor quality, "7" indicates 7th extension
+                // Remove "m7" - the "m" will be handled in quality parsing below
+                suffix = suffix.Replace("m7", "");
+                suffixLower = suffix.ToLowerInvariant();
+                // Set quality to minor since "m7" implies minor triad
+                quality = ChordQuality.Minor;
+            }
+            // Check for plain dominant 7th (just "7")
+            else if (suffix.Contains("7"))
+            {
+                seventhQuality = SeventhQuality.Dominant7;
+                extension = ChordExtension.Seventh;
+                suffix = suffix.Replace("7", "");
+                suffixLower = suffix.ToLowerInvariant();
+            }
+
+            // Now parse triad quality from remaining suffix (if not already set)
+            // IMPORTANT: Check longer/more specific suffixes before shorter ones to avoid shadowing
+            // (e.g., "dim7", "dim" must be checked before "m", otherwise "dim" would match "m")
+            if (quality == ChordQuality.Major) // Only parse if quality wasn't set by 7th extension logic
+            {
+                // Check "min" first (longer than "m")
+                if (suffixLower.Contains("min"))
+                {
+                    quality = ChordQuality.Minor;
+                    suffix = suffix.Replace("min", "").Replace("Min", "").Replace("MIN", "");
+                    suffixLower = suffix.ToLowerInvariant();
+                }
+                // Check "dim" before "m" (to avoid "dim" matching "m" via Contains("m"))
+                // Also support "o" as alias for "dim" (e.g., "Bo" = "Bdim", "Bo7" would be handled separately if needed)
+                else if (suffixLower.Contains("dim") || suffix.Contains("°"))
+                {
+                    quality = ChordQuality.Diminished;
+                    // Remove "dim" (case-insensitive)
+                    suffix = suffix.Replace("dim", "", System.StringComparison.OrdinalIgnoreCase);
+                    // Remove "°" symbol
+                    suffix = suffix.Replace("°", "");
+                    suffixLower = suffix.ToLowerInvariant();
+                }
+                // Check for "o" alias for "dim" (must be at start of suffix, not part of another suffix)
+                // Handle "Bo" but be careful not to match "o7" (diminished 7th uses "dim7" or "°7", not "o7")
+                else if (suffixLower.StartsWith("o") && (suffixLower.Length == 1 || !char.IsDigit(suffixLower[1])))
+                {
+                    quality = ChordQuality.Diminished;
+                    // Remove first character if it's 'o' or 'O'
+                    if (suffix.Length > 0 && (suffix[0] == 'o' || suffix[0] == 'O'))
+                    {
+                        suffix = suffix.Substring(1);
+                    }
+                    suffixLower = suffix.ToLowerInvariant();
+                }
+                // Check "aug" before single character checks
+                else if (suffixLower.Contains("aug") || suffix.Contains("+"))
+                {
+                    quality = ChordQuality.Augmented;
+                    suffix = suffix.Replace("aug", "").Replace("Aug", "").Replace("AUG", "").Replace("+", "");
+                    suffixLower = suffix.ToLowerInvariant();
+                }
+                // Check "m" last (shortest, so check after longer suffixes like "dim", "min", "aug")
+                // Standalone "m" indicates minor (but not if it's part of "maj")
+                else if (suffixLower.Contains("m") && !suffixLower.Contains("maj"))
+                {
+                    quality = ChordQuality.Minor;
+                    // Remove "m" from suffix
+                    suffix = suffix.Replace("m", "").Replace("M", "");
+                    suffixLower = suffix.ToLowerInvariant();
+                }
+                // else: quality remains Major (default)
+            }
+
+            // Check for any unrecognized characters
+            suffix = suffix.Trim();
+            if (!string.IsNullOrEmpty(suffix))
+            {
+                // Unknown suffix - could be an extension we don't support yet (e.g., "9", "11", "sus4")
+                // For now, we'll be lenient and just warn, but still return success
+                // (Future: could parse sus4, sus2, add9, etc.)
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Parses requested extensions from chord symbol suffix (sus4, add9, add11, 9, b9, #11, 11).
+        /// Extracts modifiers from parentheses or after quality markers.
+        /// Supports: sus4, 7sus4, add9, add11, 9, b9, 11, #11
+        /// </summary>
+        private static bool TryParseRequestedExtensions(string suffix, ref RequestedExtensions requested, out string errorMessage)
+        {
+            errorMessage = null;
+            requested = default;
+            
+            if (string.IsNullOrEmpty(suffix))
+            {
+                return true; // No extensions requested
+            }
+            
+            string suffixLower = suffix.ToLowerInvariant();
+            string suffixOriginal = suffix; // Keep original for #11 matching
+            
+            // Parse parentheses content: C(add9), C(sus4), C(#11), etc.
+            // Also handle forms without parentheses: C7sus4, Cadd9, G7#11 (optional)
+            // Prefer parentheses form for consistency
+            
+            // Extract content from parentheses: (add9), (sus4), (#11), (b9), (9), (11)
+            var parenMatches = System.Text.RegularExpressions.Regex.Matches(suffix, @"\(([^)]+)\)");
+            foreach (System.Text.RegularExpressions.Match match in parenMatches)
+            {
+                string content = match.Groups[1].Value.Trim(); // Keep original case for #11
+                string contentLower = content.ToLowerInvariant();
+                
+                if (contentLower == "sus4" || contentLower == "sus")
+                {
+                    requested.Sus4 = true;
+                }
+                else if (contentLower == "add9")
+                {
+                    requested.Add9 = true;
+                }
+                else if (contentLower == "add11")
+                {
+                    requested.Add11 = true;
+                }
+                else if (contentLower == "9")
+                {
+                    requested.Tension9 = true;
+                    requested.TensionFlat9 = false; // Ensure b9 and 9 are mutually exclusive
+                }
+                else if (contentLower == "b9" || contentLower == "flat9" || contentLower == "♭9")
+                {
+                    requested.TensionFlat9 = true;
+                    requested.Tension9 = false; // Ensure b9 and 9 are mutually exclusive
+                    requested.TensionSharp9 = false; // Ensure b9 and #9 are mutually exclusive
+                }
+                else if (content == "#9" || contentLower == "sharp9") // Keep # for matching
+                {
+                    requested.TensionSharp9 = true;
+                    requested.Tension9 = false; // Ensure #9 and 9 are mutually exclusive
+                    requested.TensionFlat9 = false; // Ensure #9 and b9 are mutually exclusive
+                }
+                else if (content == "#11" || contentLower == "sharp11") // Keep # for matching
+                {
+                    requested.TensionSharp11 = true;
+                }
+                else if (contentLower == "11")
+                {
+                    // Treat 11 same as add11 for now (as per requirements)
+                    requested.Add11 = true;
+                }
+                // Ignore unrecognized modifiers (conservative parsing)
+            }
+            
+            // Also check for non-parentheses forms (optional, less preferred)
+            // C7sus4, Cadd9, G7#11, Cmaj9, etc.
+            // Only match if not already found in parentheses
+            
+            // Check sus4 (can appear as sus4 or 7sus4)
+            if (!requested.Sus4)
+            {
+                if (suffixLower.Contains("sus4"))
+                {
+                    requested.Sus4 = true;
+                }
+                else if (suffixLower.Contains("7sus4"))
+                {
+                    requested.Sus4 = true; // 7sus4 also sets sus4 flag
+                }
+            }
+            
+            // Check add9/add11
+            if (!requested.Add9 && suffixLower.Contains("add9"))
+            {
+                requested.Add9 = true;
+            }
+            
+            if (!requested.Add11 && suffixLower.Contains("add11"))
+            {
+                requested.Add11 = true;
+            }
+            
+            // Check standalone 11 (not in parentheses, treat as add11)
+            if (!requested.Add11 && !suffixLower.Contains("add11"))
+            {
+                // Match "11" but not "#11" and not part of "maj7" or "7"
+                // Use regex to match standalone "11" (not preceded by # or add)
+                var match11 = System.Text.RegularExpressions.Regex.Match(suffix, @"(^|[^#a])11($|[^1])");
+                if (match11.Success)
+                {
+                    requested.Add11 = true; // Treat 11 same as add11
+                }
+            }
+            
+            // Check tensions without "add": 9, b9, #11
+            // Match standalone forms (not in parentheses, not part of other tokens)
+            if (!requested.Tension9)
+            {
+                // Match "9" but not "add9" or "maj9" (maj9 is handled separately)
+                // Actually, "maj9" should set Tension9, not Add9
+                if (suffixLower.Contains("maj9") || suffixLower.Contains("m9"))
+                {
+                    // Check if it's "maj9" (major 9th) vs "m9" (minor 9th - but that's usually m7+9)
+                    // For now, treat "maj9" as Tension9
+                    if (suffixLower.Contains("maj9"))
+                    {
+                        requested.Tension9 = true;
+                    }
+                }
+                else
+                {
+                    // Match standalone "9" (not "add9", not "maj9", not "19", etc.)
+                    var match9 = System.Text.RegularExpressions.Regex.Match(suffix, @"(^|[^a])9($|[^1])");
+                    if (match9.Success)
+                    {
+                        requested.Tension9 = true;
+                    }
+                }
+            }
+            
+            if (!requested.TensionFlat9)
+            {
+                // Match "b9" or "flat9" or "♭9"
+                if (suffixLower.Contains("b9") || suffixLower.Contains("flat9") || suffix.Contains("♭9"))
+                {
+                    requested.TensionFlat9 = true;
+                    requested.Tension9 = false; // Ensure b9 and 9 are mutually exclusive
+                    requested.TensionSharp9 = false; // Ensure b9 and #9 are mutually exclusive
+                }
+            }
+            
+            if (!requested.TensionSharp9)
+            {
+                // Match "#9" (keep # character)
+                if (suffix.Contains("#9") || suffixLower.Contains("sharp9"))
+                {
+                    requested.TensionSharp9 = true;
+                    requested.Tension9 = false; // Ensure #9 and 9 are mutually exclusive
+                    requested.TensionFlat9 = false; // Ensure #9 and b9 are mutually exclusive
+                }
+            }
+            
+            // Final check: warn if multiple 9th tensions are set (should not happen after above logic)
+            int ninthTensionCount = (requested.Tension9 ? 1 : 0) + (requested.TensionFlat9 ? 1 : 0) + (requested.TensionSharp9 ? 1 : 0);
+            if (ninthTensionCount > 1)
+            {
+                UnityEngine.Debug.LogWarning(
+                    $"[REQ_EXT_PARSE_WARN] multiple 9th tensions requested after parsing (9={requested.Tension9}, b9={requested.TensionFlat9}, #9={requested.TensionSharp9}); this should not happen. suffix={suffix}");
+                // Make them mutually exclusive: prefer b9 > #9 > 9
+                if (requested.TensionFlat9)
+                {
+                    requested.Tension9 = false;
+                    requested.TensionSharp9 = false;
+                }
+                else if (requested.TensionSharp9)
+                {
+                    requested.Tension9 = false;
+                }
+            }
+            
+            if (!requested.TensionSharp11)
+            {
+                // Match "#11" (keep # character)
+                if (suffix.Contains("#11") || suffixLower.Contains("sharp11"))
+                {
+                    requested.TensionSharp11 = true;
+                }
+            }
+            
+            return true; // Always succeed - extensions are optional
+        }
+
+        /// <summary>
+        /// Determines the chord inversion based on which chord tone the bass note corresponds to.
+        /// </summary>
+        private static bool DetermineInversionFromBass(int rootPc, ChordQuality quality, ChordExtension extension, SeventhQuality seventhQuality, int bassPc, out ChordInversion inversion)
+        {
+            inversion = ChordInversion.Root;
+
+            // Calculate chord tone pitch classes
+            int thirdPc = (rootPc + (quality == ChordQuality.Major || quality == ChordQuality.Augmented ? 4 : 3)) % 12;
+            int fifthPc = (rootPc + (quality == ChordQuality.Diminished ? 6 : quality == ChordQuality.Augmented ? 8 : 7)) % 12;
+
+            // Check if bass matches root
+            if (bassPc == rootPc)
+            {
+                inversion = ChordInversion.Root;
+                return true;
+            }
+
+            // Check if bass matches 3rd
+            if (bassPc == thirdPc)
+            {
+                inversion = ChordInversion.First;
+                return true;
+            }
+
+            // Check if bass matches 5th
+            if (bassPc == fifthPc)
+            {
+                inversion = ChordInversion.Second;
+                return true;
+            }
+
+            // Check if bass matches 7th (if present)
+            if (extension == ChordExtension.Seventh && seventhQuality != SeventhQuality.None)
+            {
+                int seventhInterval = seventhQuality switch
+                {
+                    SeventhQuality.Major7 => 11,
+                    SeventhQuality.Minor7 => 10,
+                    SeventhQuality.Dominant7 => 10,
+                    SeventhQuality.HalfDiminished7 => 10,
+                    SeventhQuality.Diminished7 => 9,
+                    _ => 10
+                };
+                int seventhPc = (rootPc + seventhInterval) % 12;
+
+                if (bassPc == seventhPc)
+                {
+                    inversion = ChordInversion.Third;
+                    return true;
+                }
+            }
+
+            // Bass note is not a chord tone
+            return false;
         }
 
         /// <summary>
@@ -1188,23 +2002,25 @@ namespace Sonoria.MusicTheory
                 rootPc += 12;
 
             // Try canonical spelling first (for both triads and 7th chords)
+            // Use key-aware spelling methods that use the key's accidental preference for enharmonic disambiguation
             string[] canonicalNames = null;
             bool hasSeventh = recipe.Extension == ChordExtension.Seventh && recipe.SeventhQuality != SeventhQuality.None;
             
             if (hasSeventh)
             {
-                // Try canonical 7th chord spelling
+                // Try canonical 7th chord spelling with key context
                 canonicalNames = TheorySpelling.GetSeventhChordSpelling(
                     rootPc,
                     recipe.Quality,
                     recipe.SeventhQuality,
+                    key,
                     recipe.RootSemitoneOffset);
             }
             
-            // If no 7th chord spelling available, try triad spelling
+            // If no 7th chord spelling available, try triad spelling with key context
             if (canonicalNames == null)
             {
-                canonicalNames = TheorySpelling.GetTriadSpelling(rootPc, recipe.Quality, recipe.RootSemitoneOffset);
+                canonicalNames = TheorySpelling.GetTriadSpelling(rootPc, recipe.Quality, key, recipe.RootSemitoneOffset);
             }
 
             // If canonical spelling is available, use it for chord tones
@@ -1369,7 +2185,10 @@ namespace Sonoria.MusicTheory
         /// <param name="rootName">The root note name (e.g., "C", "D", "F#")</param>
         /// <param name="bassMidiNote">Optional MIDI note number of the bass note for slash chord notation</param>
         /// <returns>Chord symbol string (e.g., "C", "Cmaj7", "G7", "Dm7", "Bm7b5", "Cmaj7/E")</returns>
-        public static string GetChordSymbol(TheoryKey key, ChordRecipe recipe, string rootName, int? bassMidiNote = null)
+        /// <summary>
+        /// Internal helper that builds the base chord symbol without tensions.
+        /// </summary>
+        private static string BuildBaseChordSymbol(TheoryKey key, ChordRecipe recipe, string rootName, int? bassMidiNote = null)
         {
             // First build the triad symbol exactly as for non-7th chords.
             string symbol = rootName;
@@ -1495,6 +2314,345 @@ namespace Sonoria.MusicTheory
             }
 
             return symbol;
+        }
+
+        /// <summary>
+        /// Splits a chord symbol into root name, quality suffix, and optional slash bass.
+        /// Example: "Bb7/Eb" -> rootName="Bb", qualitySuffix="7", slashBass="/Eb"
+        /// Example: "Cmaj7" -> rootName="C", qualitySuffix="maj7", slashBass=""
+        /// </summary>
+        private static void SplitChordSymbol(string baseSymbol, out string rootName, out string qualitySuffix, out string slashBass)
+        {
+            rootName = "";
+            qualitySuffix = "";
+            slashBass = "";
+
+            if (string.IsNullOrEmpty(baseSymbol))
+                return;
+
+            // Check for slash chord (bass note)
+            int slashIndex = baseSymbol.IndexOf('/');
+            if (slashIndex >= 0)
+            {
+                slashBass = baseSymbol.Substring(slashIndex);
+                baseSymbol = baseSymbol.Substring(0, slashIndex);
+            }
+
+            // Find where the quality suffix starts (after the root note name)
+            // Root note name is: letter (A-G) + optional accidental (# or b)
+            if (baseSymbol.Length == 0)
+                return;
+
+            int suffixStart = 0;
+            char first = baseSymbol[0];
+            if (first >= 'A' && first <= 'G' || first >= 'a' && first <= 'g')
+            {
+                suffixStart = 1;
+                // Check for accidental
+                if (suffixStart < baseSymbol.Length)
+                {
+                    char acc = baseSymbol[suffixStart];
+                    if (acc == '#' || acc == 'b' || acc == '♯' || acc == '♭')
+                    {
+                        suffixStart++;
+                    }
+                }
+            }
+
+            rootName = baseSymbol.Substring(0, suffixStart);
+            qualitySuffix = baseSymbol.Substring(suffixStart);
+        }
+
+        /// <summary>
+        /// Formats a chord symbol with 9th tensions.
+        /// </summary>
+        /// <param name="baseSymbol">The base chord symbol (e.g., "G7", "Cmaj7", "C", "Bb7/Eb")</param>
+        /// <param name="recipe">The chord recipe (to check if it has a 7th)</param>
+        /// <param name="tensions">List of detected tensions</param>
+        /// <returns>Formatted chord symbol with tensions (e.g., "G7(b9)", "C9", "C(add9)", "Bb9")</returns>
+        private static string FormatChordSymbolWithNinthTensions(
+            string baseSymbol,
+            ChordRecipe recipe,
+            List<ChordTension> tensions)
+        {
+            if (tensions == null || tensions.Count == 0)
+                return baseSymbol; // No tensions, return base symbol unchanged
+
+            bool hasSeventh = recipe.Extension == ChordExtension.Seventh && 
+                             recipe.SeventhQuality != SeventhQuality.None;
+
+            // Check which tensions are present (filter by classification - only label ColorTone, Suspension)
+            // AvoidTone and NonChordTone are not labeled
+            bool hasFlatNine = tensions.Any(t => t.Kind == TensionKind.FlatNine && 
+                                                 t.Classification != TensionClassification.AvoidTone &&
+                                                 t.Classification != TensionClassification.NonChordTone);
+            bool hasNine = tensions.Any(t => t.Kind == TensionKind.Nine && 
+                                             t.Classification != TensionClassification.AvoidTone &&
+                                             t.Classification != TensionClassification.NonChordTone);
+            bool hasSharpNine = tensions.Any(t => t.Kind == TensionKind.SharpNine && 
+                                                   t.Classification != TensionClassification.AvoidTone &&
+                                                   t.Classification != TensionClassification.NonChordTone);
+            
+            // For 11ths, check classification
+            var elevenTension = tensions.FirstOrDefault(t => t.Kind == TensionKind.Eleven);
+            var sharpElevenTension = tensions.FirstOrDefault(t => t.Kind == TensionKind.SharpEleven);
+            
+            bool hasEleven = false;
+            bool hasSharpEleven = false;
+            bool hasSuspension = false;
+            
+            if (elevenTension.Kind == TensionKind.Eleven)
+            {
+                hasEleven = (elevenTension.Classification == TensionClassification.Suspension ||
+                            elevenTension.Classification == TensionClassification.ColorTone);
+                hasSuspension = (elevenTension.Classification == TensionClassification.Suspension);
+            }
+            
+            if (sharpElevenTension.Kind == TensionKind.SharpEleven)
+            {
+                hasSharpEleven = (sharpElevenTension.Classification == TensionClassification.ColorTone);
+            }
+
+            // Split the base symbol into root name, quality suffix, and slash bass
+            SplitChordSymbol(baseSymbol, out string rootName, out string qualitySuffix, out string slashBass);
+
+            // Handle suspension (11 classified as Suspension) - replace quality with sus4
+            if (hasSuspension)
+            {
+                // Replace quality suffix with sus4
+                if (hasSeventh)
+                {
+                    // For 7th chords, replace "7" with "sus4" or "maj7" with "maj7sus4" etc.
+                    if (qualitySuffix.EndsWith("maj7", StringComparison.OrdinalIgnoreCase))
+                    {
+                        qualitySuffix = qualitySuffix.Substring(0, qualitySuffix.Length - 4) + "maj7sus4";
+                    }
+                    else if (qualitySuffix.EndsWith("m7", StringComparison.OrdinalIgnoreCase))
+                    {
+                        qualitySuffix = qualitySuffix.Substring(0, qualitySuffix.Length - 2) + "m7sus4";
+                    }
+                    else if (qualitySuffix.EndsWith("7", StringComparison.OrdinalIgnoreCase))
+                    {
+                        qualitySuffix = qualitySuffix.Substring(0, qualitySuffix.Length - 1) + "7sus4";
+                    }
+                    else
+                    {
+                        qualitySuffix = qualitySuffix + "sus4";
+                    }
+                }
+                else
+                {
+                    // For triads, replace quality with sus4
+                    if (qualitySuffix == "m" || qualitySuffix == "min")
+                    {
+                        qualitySuffix = "sus4";
+                    }
+                    else if (qualitySuffix == "" || qualitySuffix == "M" || qualitySuffix == "maj")
+                    {
+                        qualitySuffix = "sus4";
+                    }
+                    else
+                    {
+                        qualitySuffix = qualitySuffix + "sus4";
+                    }
+                }
+                
+                // Return sus4 symbol (don't add 11 in parentheses)
+                return $"{rootName}{qualitySuffix}{slashBass}";
+            }
+
+            if (hasSeventh)
+            {
+                // Chord has a 7th extension
+                // Build tension strings (9ths and 11ths)
+                var tensionStrings = new List<string>();
+                bool hasAnyNinth = hasFlatNine || hasNine || hasSharpNine;
+                bool hasAnyEleventh = hasEleven || hasSharpEleven;
+                
+                if (hasFlatNine || hasSharpNine || (hasNine && hasAnyEleventh))
+                {
+                    // Has altered 9ths (b9 or #9) or natural 9 with 11ths - append in parentheses
+                    if (hasFlatNine) tensionStrings.Add("b9");
+                    if (hasNine) tensionStrings.Add("9");
+                    if (hasSharpNine) tensionStrings.Add("#9");
+                    if (hasEleven) tensionStrings.Add("11");
+                    if (hasSharpEleven) tensionStrings.Add("#11");
+                    // Keep the 7-based suffix and append tensions
+                    return $"{rootName}{qualitySuffix}({string.Join(",", tensionStrings)}){slashBass}";
+                }
+                else if (hasNine && !hasAnyEleventh)
+                {
+                    // Only natural 9, no 11ths - promote 7 to 9 where appropriate
+                    // Replace "7" with "9" or "maj7" with "maj9" or "m7" with "m9"
+                    string newSuffix = qualitySuffix;
+                    if (qualitySuffix.EndsWith("maj7", StringComparison.OrdinalIgnoreCase))
+                    {
+                        newSuffix = qualitySuffix.Substring(0, qualitySuffix.Length - 4) + "maj9";
+                    }
+                    else if (qualitySuffix.EndsWith("m7", StringComparison.OrdinalIgnoreCase))
+                    {
+                        newSuffix = qualitySuffix.Substring(0, qualitySuffix.Length - 2) + "m9";
+                    }
+                    else if (qualitySuffix.EndsWith("7", StringComparison.OrdinalIgnoreCase))
+                    {
+                        newSuffix = qualitySuffix.Substring(0, qualitySuffix.Length - 1) + "9";
+                    }
+                    else
+                    {
+                        // Fallback: add (add9)
+                        return $"{rootName}{qualitySuffix}(add9){slashBass}";
+                    }
+                    return $"{rootName}{newSuffix}{slashBass}";
+                }
+                else if (hasAnyEleventh)
+                {
+                    // Only 11ths, no 9ths - append in parentheses
+                    if (hasEleven) tensionStrings.Add("11");
+                    if (hasSharpEleven) tensionStrings.Add("#11"); // Raw "#11", parentheses added by wrapper
+                    return $"{rootName}{qualitySuffix}({string.Join(",", tensionStrings)}){slashBass}";
+                }
+            }
+            else
+            {
+                // Plain triad - use add syntax
+                var addStrings = new List<string>();
+                if (hasFlatNine) addStrings.Add("addb9");
+                if (hasNine) addStrings.Add("add9");
+                if (hasSharpNine) addStrings.Add("add#9");
+                if (hasEleven) addStrings.Add("add11");
+                if (hasSharpEleven) addStrings.Add("add#11");
+                
+                if (addStrings.Count > 0)
+                {
+                    return $"{rootName}{qualitySuffix}({string.Join(",", addStrings)}){slashBass}";
+                }
+            }
+
+            return baseSymbol; // Fallback
+        }
+
+        /// <summary>
+        /// Gets a chord symbol (base overload without tensions).
+        /// </summary>
+        public static string GetChordSymbol(TheoryKey key, ChordRecipe recipe, string rootName, int? bassMidiNote = null)
+        {
+            return BuildBaseChordSymbol(key, recipe, rootName, bassMidiNote);
+        }
+
+        /// <summary>
+        /// Gets a chord symbol with optional tensions (9ths and 11ths).
+        /// </summary>
+        /// <param name="key">The key context</param>
+        /// <param name="recipe">The chord recipe</param>
+        /// <param name="rootName">The root note name (e.g., "G", "C#")</param>
+        /// <param name="bassMidiNote">Optional bass note MIDI for slash chord notation</param>
+        /// <param name="tensions">Optional list of detected tensions</param>
+        /// <returns>Formatted chord symbol (e.g., "G7(b9)", "C9", "C(add9)", "C(add11)", "G7(#11)")</returns>
+        public static string GetChordSymbolWithTensions(
+            TheoryKey key,
+            ChordRecipe recipe,
+            string rootName,
+            int? bassMidiNote,
+            List<ChordTension> tensions)
+        {
+            // Get base symbol (without tensions)
+            string baseSymbol = BuildBaseChordSymbol(key, recipe, rootName, bassMidiNote);
+            
+            // Check for requested sus4 first (takes precedence over other formatting)
+            if (recipe.RequestedExtensions.Sus4)
+            {
+                // Handle sus4: replace quality with sus4 or append 7sus4
+                SplitChordSymbol(baseSymbol, out string rootName2, out string qualitySuffix2, out string slashBass2);
+                bool hasSeventh = recipe.Extension == ChordExtension.Seventh && 
+                                 recipe.SeventhQuality != SeventhQuality.None;
+                
+                if (hasSeventh)
+                {
+                    // For 7th chords, append sus4: C7sus4, Cmaj7sus4, etc.
+                    if (qualitySuffix2.EndsWith("maj7", StringComparison.OrdinalIgnoreCase))
+                    {
+                        qualitySuffix2 = qualitySuffix2.Substring(0, qualitySuffix2.Length - 4) + "maj7sus4";
+                    }
+                    else if (qualitySuffix2.EndsWith("m7", StringComparison.OrdinalIgnoreCase))
+                    {
+                        qualitySuffix2 = qualitySuffix2.Substring(0, qualitySuffix2.Length - 2) + "m7sus4";
+                    }
+                    else if (qualitySuffix2.EndsWith("7", StringComparison.OrdinalIgnoreCase))
+                    {
+                        qualitySuffix2 = qualitySuffix2.Substring(0, qualitySuffix2.Length - 1) + "7sus4";
+                    }
+                    else
+                    {
+                        qualitySuffix2 = qualitySuffix2 + "sus4";
+                    }
+                }
+                else
+                {
+                    // For triads, replace quality with sus4
+                    if (qualitySuffix2 == "m" || qualitySuffix2 == "min")
+                    {
+                        qualitySuffix2 = "sus4";
+                    }
+                    else if (qualitySuffix2 == "" || qualitySuffix2 == "M" || qualitySuffix2 == "maj")
+                    {
+                        qualitySuffix2 = "sus4";
+                    }
+                    else
+                    {
+                        qualitySuffix2 = qualitySuffix2 + "sus4";
+                    }
+                }
+                
+                return $"{rootName2}{qualitySuffix2}{slashBass2}";
+            }
+            
+            // If tensions are provided, format with tensions
+            if (tensions != null && tensions.Count > 0)
+            {
+                return FormatChordSymbolWithNinthTensions(baseSymbol, recipe, tensions);
+            }
+            
+            // If no detected tensions but requested extensions exist, show requested extensions
+            var req = recipe.RequestedExtensions;
+            if (req.HasAny && !req.Sus4) // sus4 already handled above
+            {
+                bool hasSeventh = recipe.Extension == ChordExtension.Seventh && 
+                                 recipe.SeventhQuality != SeventhQuality.None;
+                
+                SplitChordSymbol(baseSymbol, out string rootName3, out string qualitySuffix3, out string slashBass3);
+                var tensionStrings = new List<string>();
+                
+                if (req.TensionFlat9) tensionStrings.Add("b9");
+                if (req.Tension9) tensionStrings.Add("9");
+                if (req.TensionSharp9) tensionStrings.Add("#9");
+                if (req.TensionSharp11) tensionStrings.Add("#11");
+                if (req.Add9) tensionStrings.Add("add9");
+                if (req.Add11) tensionStrings.Add("add11");
+                
+                if (tensionStrings.Count > 0)
+                {
+                    if (hasSeventh)
+                    {
+                        // Append in parentheses for 7th chords
+                        return $"{rootName3}{qualitySuffix3}({string.Join(",", tensionStrings)}){slashBass3}";
+                    }
+                    else
+                    {
+                        // Use add syntax for triads
+                        var addStrings = new List<string>();
+                        foreach (var t in tensionStrings)
+                        {
+                            if (t.StartsWith("add"))
+                                addStrings.Add(t);
+                            else
+                                addStrings.Add($"add{t}");
+                        }
+                        return $"{rootName3}{qualitySuffix3}({string.Join(",", addStrings)}){slashBass3}";
+                    }
+                }
+            }
+            
+            return baseSymbol;
         }
 
         /// <summary>

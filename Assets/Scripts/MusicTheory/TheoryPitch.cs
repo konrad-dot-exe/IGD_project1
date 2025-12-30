@@ -82,24 +82,19 @@ namespace Sonoria.MusicTheory
 
         /// <summary>
         /// Determines whether a key prefers sharp or flat spellings for generic pitch class naming.
-        /// This is a heuristic based on common key signature practice, not a complete theory of key signatures.
-        /// Root note spellings should use GetNoteNameForDegreeWithOffset() for more rigorous key-aware spelling.
+        /// Uses a hard-coded mapping based on tonic index (0-11) for consistent enharmonic spelling.
+        /// For Ionian (major), the mapping is:
+        /// - Sharps: C(0), D(2), E(4), G(7), A(9), B(11)
+        /// - Flats: Db(1), Eb(3), F(5), Gb(6), Ab(8), Bb(10)
+        /// For non-Ionian modes, the same mapping is used based on tonic index only.
         /// </summary>
         /// <param name="key">The key to analyze</param>
-        /// <returns>AccidentalPreference.Sharps for keys that typically use sharps, Flats for keys that typically use flats</returns>
+        /// <returns>AccidentalPreference.Sharps for keys that use sharps, Flats for keys that use flats</returns>
         public static AccidentalPreference GetAccidentalPreference(TheoryKey key)
         {
-            // For minor keys (Aeolian), prefer flats regardless of tonic
-            // This ensures borrowed minor chords use flat spellings (e.g., Eb instead of D#)
-            if (key.Mode == ScaleMode.Aeolian)
-            {
-                return AccidentalPreference.Flats;
-            }
-            
-            // For major keys (Ionian) and other modes, use tonic-based heuristic
-            // Sharp keys: C, D, E, G, A, B, F#, C#
-            // Flat keys: F, Bb, Eb, Ab, Db, Gb
-            switch (key.TonicPitchClass)
+            int tonicIndex = key.TonicPitchClass; // 0..11, C=0, C#/Db=1, etc.
+
+            switch (tonicIndex)
             {
                 case 0:  // C
                 case 2:  // D
@@ -107,16 +102,18 @@ namespace Sonoria.MusicTheory
                 case 7:  // G
                 case 9:  // A
                 case 11: // B
-                case 6:  // F# (treat as sharp key)
-                case 1:  // C# (treat as sharp key)
                     return AccidentalPreference.Sharps;
 
-                case 5:  // F
-                case 10: // Bb
+                case 1:  // Db
                 case 3:  // Eb
+                case 5:  // F
+                case 6:  // Gb
                 case 8:  // Ab
-                default: // Db (1), Gb (6) - ambiguous but default to flats
+                case 10: // Bb
                     return AccidentalPreference.Flats;
+
+                default:
+                    return AccidentalPreference.Sharps; // fallback (should never happen with normalized 0-11 range)
             }
         }
 

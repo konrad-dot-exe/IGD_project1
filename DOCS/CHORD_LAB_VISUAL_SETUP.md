@@ -2,11 +2,12 @@
 
 ## Overview
 
-This guide explains how to set up the visual chord representation UI in the Chord Lab panel. The code implementation is complete; you just need to create the UI structure and wire up references in Unity.
+This guide explains how to set up the visual chord representation UI in the Chord Lab panel.
 
 ## Implementation Status
 
 ✅ **Completed:**
+
 - `TheoryPitch.GetPitchNameFromMidi()` - Note name helper method with key-aware enharmonic spelling
 - `TheoryPitch.GetNoteNameForDegreeWithOffset()` - Key-aware root note spelling
 - `TheoryChord.GetSpelledChordTones()` - Chord-aware enharmonic spelling for chord tones (legacy)
@@ -44,6 +45,7 @@ Panel_ChordLab
 ### ScrollRect Setup
 
 1. **Create Scroll_ChordGrid:**
+
    - Right-click `Panel_ChordLab` → UI → Scroll View
    - Rename to `Scroll_ChordGrid`
    - Configure ScrollRect component:
@@ -66,6 +68,7 @@ Panel_ChordLab
 ### Create the Prefab
 
 1. **Create Prefab Structure:**
+
    ```
    ChordColumnView (GameObject)
    ├── Canvas (nested, auto-created by Unity)
@@ -82,6 +85,7 @@ Panel_ChordLab
    **Note:** Each note text element can optionally have a background Image component for the box effect. The layout should accommodate both 3-note triads and 4-note 7th chords.
 
 2. **Setup Steps:**
+
    - Create empty GameObject: `ChordColumnView`
    - Add `VerticalLayoutGroup` component
      - Spacing: 5-10 pixels
@@ -91,14 +95,17 @@ Panel_ChordLab
    - Add `ChordColumnView` script component
 
 3. **Create Text Elements:**
+
    - **Text_ChordName**
+
      - Create: Right-click ChordColumnView → UI → Text - TextMeshPro
      - Font size: 24-28
      - Alignment: Center
      - Text: "C" (placeholder)
      - **Note:** Layout position depends on your design (top or bottom with Roman numeral)
-   
+
    - **Text_NoteTop** (highest note)
+
      - Create: Right-click ChordColumnView → UI → Text - TextMeshPro
      - Add Image component as background (optional, for box effect)
      - Font size: 18-22
@@ -106,8 +113,9 @@ Panel_ChordLab
      - Preferred width: 50-60 pixels
      - Preferred height: 40-50 pixels
      - Text: "G" (placeholder)
-   
+
    - **Text_NoteUpperMiddle** (upper middle note - for 7th chords)
+
      - Create: Right-click ChordColumnView → UI → Text - TextMeshPro
      - Add Image component as background (optional, for box effect)
      - Font size: 18-22
@@ -116,8 +124,9 @@ Panel_ChordLab
      - Preferred height: 40-50 pixels
      - Text: "E" (placeholder)
      - **Important:** This field is only used for 7th chords (4 notes). For triads, it will be hidden.
-   
+
    - **Text_NoteLowerMiddle** (lower middle note)
+
      - Create: Right-click ChordColumnView → UI → Text - TextMeshPro
      - Add Image component as background (optional, for box effect)
      - Font size: 18-22
@@ -125,8 +134,9 @@ Panel_ChordLab
      - Preferred width: 50-60 pixels
      - Preferred height: 40-50 pixels
      - Text: "E" (placeholder for triads) or "C" (for 7th chords)
-   
+
    - **Text_NoteBottom** (lowest note)
+
      - Create: Right-click ChordColumnView → UI → Text - TextMeshPro
      - Add Image component as background (optional, for box effect)
      - Font size: 18-22
@@ -134,7 +144,7 @@ Panel_ChordLab
      - Preferred width: 50-60 pixels
      - Preferred height: 40-50 pixels
      - Text: "C" (placeholder)
-   
+
    - **Text_Roman**
      - Create: Right-click ChordColumnView → UI → Text - TextMeshPro
      - Font size: 20-24
@@ -143,6 +153,7 @@ Panel_ChordLab
      - **Note:** Layout position depends on your design (bottom with chord name)
 
 4. **Wire Script References:**
+
    - Select `ChordColumnView` GameObject
    - In `ChordColumnView` script component:
      - Drag `Text_ChordName` to `chordNameText`
@@ -163,6 +174,7 @@ The VoicingViewer component displays accumulated SATB voicings during naive harm
 ### Create Voicing_Viewer GameObject
 
 1. **Create Structure:**
+
    ```
    Voicing_Viewer (GameObject)
    ├── VoicingViewer script component
@@ -174,34 +186,40 @@ The VoicingViewer component displays accumulated SATB voicings during naive harm
    ```
 
 2. **Setup Steps:**
+
    - Create empty GameObject: `Voicing_Viewer` (under `Panel_ChordLab`)
    - Add `VoicingViewer` script component
 
 3. **Create Text Elements:**
+
    - **Text_Header**
+
      - Create: Right-click Voicing_Viewer → UI → Text - TextMeshPro
      - Font size: 18-22
      - Alignment: Center
      - Text: "Current Voicing" (placeholder)
-   
+
    - **Text_Soprano**
+
      - Create: Right-click Voicing_Viewer → UI → Text - TextMeshPro
      - Font size: 16-20
      - Alignment: Left (or Center, depending on layout preference)
      - Text: "S:" (placeholder, or just empty)
-   
+
    - **Text_Alto**
+
      - Create: Right-click Voicing_Viewer → UI → Text - TextMeshPro
      - Font size: 16-20
      - Alignment: Left (or Center, depending on layout preference)
      - Text: "A:" (placeholder, or just empty)
-   
+
    - **Text_Tenor**
+
      - Create: Right-click Voicing_Viewer → UI → Text - TextMeshPro
      - Font size: 16-20
      - Alignment: Left (or Center, depending on layout preference)
      - Text: "T:" (placeholder, or just empty)
-   
+
    - **Text_Bass**
      - Create: Right-click Voicing_Viewer → UI → Text - TextMeshPro
      - Font size: 16-20
@@ -218,6 +236,117 @@ The VoicingViewer component displays accumulated SATB voicings during naive harm
      - Drag `Text_Bass` to `bassText`
      - **Optional:** Configure `Large Leap Semitone Threshold` (default: 5) - Notes with voice movements at or above this threshold will be highlighted in red
 
+## Melody Piano Roll Setup
+
+The Melody Piano Roll displays melody events as a visual grid-based piano roll with procedural pitch background rows showing black/white key distinction.
+
+### Create MelodyPianoRoll GameObject
+
+1. **Create Structure:**
+
+   ```
+   MelodyPianoRoll (GameObject)
+   ├── MelodyPianoRoll script component
+   ├── Scroll_MelodyPianoRoll (ScrollRect)
+   │    └── Viewport
+   │         ├── PitchBackgroundContainer (RectTransform: Stretched to fill viewport)
+   │         └── Content (GameObject with HorizontalLayoutGroup)
+   │              └── (MelodyPianoRollColumn instances will be instantiated here)
+   └── (columnPrefab reference)
+   ```
+
+2. **Setup Steps:**
+
+   - Create empty GameObject: `MelodyPianoRoll` (under `MainContainer`)
+   - Add `MelodyPianoRoll` script component
+
+3. **Create ScrollRect:**
+
+   - Right-click `MelodyPianoRoll` → UI → Scroll View
+   - Rename to `Scroll_MelodyPianoRoll`
+   - Configure ScrollRect component:
+     - Horizontal: enabled
+     - Vertical: disabled
+     - Movement Type: Elastic or Clamped
+
+4. **Create PitchBackgroundContainer:**
+
+   - Under `Scroll_MelodyPianoRoll/Viewport`, create empty GameObject: `PitchBackgroundContainer`
+   - Add `RectTransform` component (auto-added)
+   - Configure RectTransform:
+     - Anchor Preset: Stretch-Stretch (to fill the viewport)
+     - Left, Right, Top, Bottom: all 0
+     - **Important:** This GameObject should appear BEFORE `Content` in the Hierarchy (so columns draw on top)
+
+5. **Configure Content:**
+
+   - The ScrollRect automatically creates a `Content` child
+   - Add `Horizontal Layout Group` component to Content
+   - Settings:
+     - Spacing: 2-4 pixels (or as desired)
+     - Child Alignment: Middle Left (or Upper Left)
+     - Child Controls Size: Both checked
+     - Child Force Expand: Width unchecked, Height unchecked
+   - Add `Content Size Fitter` component to Content:
+     - Horizontal Fit: Preferred Size
+     - Vertical Fit: Unconstrained
+   - This ensures Content expands horizontally to accommodate all columns
+
+## MelodyPianoRollColumn Prefab
+
+### Create the Prefab
+
+1. **Create Prefab Structure:**
+
+   ```
+   columnPrefab (GameObject)
+   ├── RectTransform
+   ├── MelodyPianoRollColumn script
+   ├── Image (Background - for highlighting and grouping)
+   └── NoteBar (GameObject)
+        ├── RectTransform (anchored for vertical positioning)
+        └── Image (Note bar visual)
+   ```
+
+2. **Setup Steps:**
+
+   - Create empty GameObject: `columnPrefab`
+   - Add `Image` component (this will be the column background)
+   - Add `MelodyPianoRollColumn` script component
+   - Add `LayoutElement` component:
+     - Preferred Width: 30-40 pixels (or as desired)
+     - Preferred Height: (matches piano roll height, typically 250-300 pixels)
+
+3. **Create NoteBar:**
+
+   - Right-click `columnPrefab` → Create Empty
+   - Rename to `NoteBar`
+   - Add `RectTransform` component (auto-added)
+   - Add `Image` component (this will be the note bar visual)
+   - Configure RectTransform:
+     - Anchor Preset: Stretch-Stretch
+     - Left, Right: 0
+     - Initially set anchors to span full height (will be adjusted at runtime)
+   - Configure Image:
+     - Color: Light cyan/blue (will be overridden by script)
+
+4. **Wire Script References:**
+
+   - Select `columnPrefab` GameObject
+   - In `MelodyPianoRollColumn` script component:
+     - Drag the background `Image` component to `Background Image`
+     - Drag `NoteBar` RectTransform to `Note Bar Rect`
+     - Drag `NoteBar/Image` component to `Note Bar Image`
+   - Configure Timeline Grouping (optional):
+     - `Group Size`: 4 (or desired number of steps per group)
+     - `Group A Color`: Lighter gray for even-numbered groups
+     - `Group B Color`: Darker gray for odd-numbered groups
+
+5. **Create Prefab:**
+
+   - Drag `columnPrefab` from Hierarchy to `Assets/Prefabs/` (or wherever you store prefabs)
+   - Delete the instance from the scene (we'll instantiate from prefab)
+
 ## Wiring ChordLabController
 
 1. **Select `Panel_ChordLab` in Hierarchy**
@@ -225,16 +354,59 @@ The VoicingViewer component displays accumulated SATB voicings during naive harm
 2. **In `Chord Lab Controller` component:**
 
    **Chord Grid section:**
+
    - `Chord Grid Container` → Drag `Scroll_ChordGrid/Content` GameObject
    - `Chord Column Prefab` → Drag the `ChordColumnView` prefab you created
-   
+
    **Voicing Viewer section:**
+
    - `Voicing Viewer` → Drag the `Voicing_Viewer` GameObject (optional - leave unassigned if not using)
-   
+
+   **Melody Piano Roll section:**
+
+   - `Melody Piano Roll` → Drag the `MelodyPianoRoll` GameObject (optional - leave unassigned if not using)
+
+## Wiring MelodyPianoRoll
+
+1. **Select `MelodyPianoRoll` GameObject in Hierarchy**
+
+2. **In `Melody Piano Roll` script component:**
+
+   **UI References section:**
+
+   - `Pitch Background Container` → Drag `Scroll_MelodyPianoRoll/Viewport/PitchBackgroundContainer` GameObject
+   - `Columns Container` → Drag `Scroll_MelodyPianoRoll/Viewport/Content` GameObject
+   - `Column Prefab` → Drag the `columnPrefab` prefab you created
+   - `Piano Roll Scroll Rect` → Drag `Scroll_MelodyPianoRoll` ScrollRect component (optional, for scroll sync)
+   - `Voicing Scroll Rect` → Drag VoicingViewer's ScrollRect (optional, for scroll sync)
+
+   **Pitch Range section:**
+
+   - `Lowest Midi` → Lowest MIDI note to display (default: 60, C4)
+   - `Highest Midi` → Highest MIDI note to display (default: 79, G5)
+
+   **Styling section:**
+
+   - `Normal Background Color` → Background color for normal (non-highlighted) columns
+   - `Highlight Background Color` → Background color for highlighted (currently playing) columns
+   - `Note Bar Color` → Color for note bars (single color for all pitches, default: light cyan)
+   - `White Key Row Color` → Background color for white key pitch rows (default: light gray)
+   - `Black Key Row Color` → Background color for black key pitch rows (default: darker gray)
+
+   **Visual State Styling section:**
+
+   - `Hidden Alpha` → Alpha value for Hidden state (0-1, default: 0.0)
+   - `Visible Alpha` → Alpha value for Visible state (0-1, default: 1.0)
+   - `Highlighted Alpha` → Alpha value for Highlighted state (0-1, default: 1.0)
+   - `Visible Tint` → Color tint for Visible state (default: white)
+   - `Highlighted Tint` → Color tint for Highlighted state (default: white)
+   - **Note:** These parameters control the visual appearance of chord columns during playback. Tinting applies to all visuals (background, note tiles, text) automatically.
+
    **UI Controls section (if using runtime buttons):**
+
    - `Button Naive Harmonize` → Drag button for naive harmonization (optional - runtime UI)
    - `Button Play Voiced` → Drag button for playing manual progression with SATB voicing (optional)
-   
+
    **Note:** Both buttons are optional. If unassigned, the corresponding functionality is still available via Editor menu items.
 
 ## Visual Styling Suggestions
@@ -242,11 +414,18 @@ The VoicingViewer component displays accumulated SATB voicings during naive harm
 - **Column Width:** 60-80 pixels
 - **Column Spacing:** 10-20 pixels
 - **Note Boxes:** Add subtle background images or borders for box effect
-- **Font Colors:** 
+- **Font Colors:**
   - Chord name: White or accent color
   - Note names: White or light gray
   - Roman numeral: White or accent color
 - **Layout:** VerticalLayoutGroup makes stacking automatic
+- **Visual State System:**
+  - Chord columns support three visual states during playback: Hidden, Visible, Highlighted
+  - All visuals (background, note tiles, text) are automatically tinted based on state
+  - Configure alpha and tint values in ChordLabController Inspector
+  - Hidden state allows "pre-visible" columns when `hiddenAlpha > 0` (e.g., 0.3 for faint preview)
+  - Highlighted state can use a different tint to emphasize the currently playing chord
+  - Visual state changes are applied automatically during playback (no manual setup needed)
 
 ## Testing
 
@@ -369,6 +548,7 @@ After setting up VoicingViewer:
 - Ensure ShowVoicing() is called once per chord in sequence
 
 **No columns appear:**
+
 - Check Console for errors
 - Verify `chordGridContainer` is assigned
 - Verify `chordColumnPrefab` is assigned
@@ -376,11 +556,13 @@ After setting up VoicingViewer:
 - Enable debug logs in ChordLabController to see rendering messages
 
 **Columns appear but are empty:**
+
 - Check that all text fields are assigned in the prefab
 - Verify text elements are child objects of the prefab root
 - Check Console for parsing errors
 
 **Columns appear but text is wrong:**
+
 - Verify note names are being generated correctly (check debug logs)
 - Check that chord symbols match expected format (including 7th suffixes: maj7, m7, m7b5, aug7)
 - Check for slash chord notation in inversions (e.g., "Cmaj7/E")
@@ -392,16 +574,89 @@ After setting up VoicingViewer:
 - Chord tone names should use chord-aware spelling (e.g., Cm in G Ionian should show C–Eb–G, not C–D#–G)
 
 **7th chords not displaying 4 notes:**
+
 - Verify `noteUpperMiddleText` field is assigned in prefab
 - Check that `SetChord()` method is being called (not legacy `SetTexts()`)
 - Enable debug logs to see note count in console
 - Verify chord parsing is recognizing 7th extension correctly
 
+## Troubleshooting Melody Piano Roll
+
+**Piano roll not displaying:**
+
+- Verify `melodyPianoRoll` field is assigned in ChordLabController Inspector
+- Check Console for errors during playback
+- Ensure MelodyPianoRoll component has all required references assigned:
+  - `pitchBackgroundContainer` must be assigned
+  - `columnsContainer` must be assigned
+  - `columnPrefab` must be assigned
+- Verify melody input is not empty and melody events are being generated
+
+**Pitch background rows not appearing:**
+
+- Verify `pitchBackgroundContainer` is assigned and is a child of Viewport
+- Check that `PitchBackgroundContainer` appears BEFORE `Content` in Hierarchy (so columns draw on top)
+- Verify `PitchBackgroundContainer` RectTransform is set to Stretch-Stretch (fills viewport)
+- Ensure `lowestMidi` and `highestMidi` are set to valid values (e.g., 60-91)
+
+**Note bars not appearing or positioned incorrectly:**
+
+- Verify `columnPrefab` has `MelodyPianoRollColumn` component
+- Check that `noteBarRect` and `noteBarImage` are assigned in prefab
+- Ensure note bars are positioned within valid pitch range
+- Verify note bar RectTransform is set up correctly (anchors should be adjusted at runtime)
+
+**Columns compressing instead of scrolling:**
+
+- Verify `Content` GameObject has `ContentSizeFitter` component
+- Set `ContentSizeFitter.Horizontal Fit` to `Preferred Size`
+- Ensure `columnPrefab` has `LayoutElement` with `Preferred Width` set (e.g., 30-40 pixels)
+- Check that `HorizontalLayoutGroup` on Content has `Child Controls Size: Width` checked
+
+**Highlighting not synchronized with VoicingViewer:**
+
+- Verify both `melodyPianoRoll` and `voicingViewer` are assigned in ChordLabController
+- Check that `SetHighlightedStep()` is being called for both during playback
+- Ensure step indices match (both use 0-based quarter-note steps)
+
+**Scroll synchronization not working:**
+
+- Verify `pianoRollScrollRect` and `voicingScrollRect` are assigned in MelodyPianoRoll Inspector
+- Check that scroll synchronization callback is wired up (if using this feature)
+
 ## Code Reference
 
+- `MelodyPianoRoll.cs` - Script for piano roll display
+  - `RenderFromEvents()` - Renders piano roll from timeline melody events
+  - `SetHighlightedStep()` - Sets highlighted step (synchronized with VoicingViewer)
+  - `Clear()` - Clears piano roll display
+  - `RebuildPitchBackground()` - Procedurally generates pitch background rows
+  - `RebuildColumns()` - Creates column instances for each timeline step
+- `MelodyPianoRollColumn.cs` - Script for individual column
+  - `Initialize()` - Initializes column with pitch range and colors
+  - `SetNote()` - Sets note for column and positions note bar
+  - `SetHighlighted()` - Sets highlight state
+  - Timeline grouping support for alternating background colors
+- `MelodyPianoRoll.cs` - Script for piano roll display
+  - `RenderFromEvents()` - Renders piano roll from timeline melody events
+  - `SetHighlightedStep()` - Sets highlighted step (synchronized with VoicingViewer)
+  - `Clear()` - Clears piano roll display
+  - `RebuildPitchBackground()` - Procedurally generates pitch background rows
+  - `RebuildColumns()` - Creates column instances for each timeline step
+- `MelodyPianoRollColumn.cs` - Script for individual column
+  - `Initialize()` - Initializes column with pitch range and colors
+  - `SetNote()` - Sets note for column and positions note bar
+  - `SetHighlighted()` - Sets highlight state
+  - Timeline grouping support for alternating background colors
 - `ChordColumnView.cs` - Script for individual chord column
   - `SetChord()` - Main method (accepts note list, handles 3-4 notes, diatonic status, analysis info)
+  - `SetVizState()` - Sets visual state (Hidden / Visible / Highlighted) with alpha and tint control
+    - Applies tinting to all child visuals automatically (background, note tiles, text)
+    - Uses CanvasGroup for alpha control (preserves layout spacing)
+    - Caches child visuals automatically (no manual assignment needed)
+  - `CacheChildVisuals()` - Private method that discovers and caches all child visuals for tinting
   - `SetTexts()` - Legacy method (obsolete, kept for compatibility)
+  - `ColumnVizState` enum - Visual state enumeration (Hidden, Visible, Highlighted)
 - `VoicingViewer.cs` - Script for SATB voicing display
   - `ShowVoicing()` - Appends voiced chord notes to accumulating sequence
     - Uses canonical chord spelling via `TheorySpelling` lookup table
@@ -465,4 +720,3 @@ The Chord Lab supports seventh chords end-to-end:
   - Uses `TheorySpelling.GetTriadSpelling()` for canonical chord tone spelling in both ChordGrid and VoicingViewer
   - Ensures musically correct enharmonic spellings via lookup table (supports major, minor, diminished, augmented triads)
   - Non-triad tones (7ths, extensions) use key-aware spelling as fallback
-
